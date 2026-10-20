@@ -22,7 +22,7 @@
 <script src="config.js"></script>
 <script>
 /*
- * 잠만보 보드게임 모임 — GitHub Pages 시작 페이지 (v2.0, 속도 최적화)
+ * 잠만보 보드게임 모임 — GitHub Pages 시작 페이지 (v2.1, 속도 최적화 + 안전장치)
  *
  * 화면 코드(Index.html)·데이터는 시트 안의 Apps Script 에서 받아 옵니다. (주소는 config.js)
  * 화면을 고칠 때는 Apps Script 의 Index.html 만 고치고 '새 버전 배포'하면 됩니다. (여기는 안 고쳐도 됨)
@@ -36,7 +36,18 @@
  * [권한] 로그인 없이는 조회만 · 로그인하면 자기 닉네임으로만 등록 · 익명 글은 누구나
  *   회원용 쓰기 요청에는 카카오 세션 토큰을 마지막 인자로 붙여 보내고, 서버(Kakao.gs)가 최종 확인합니다.
  */
-var CFG = window.JMB_CONFIG;
+/* 초기화: 주소 끝에 ?reset 을 붙여 열면 이 기기의 잠만보 캐시(서비스 워커·저장된 화면·데이터)를 모두 지우고 새로 시작
+ * (로그인 정보 jmb_kakao_v2 는 남겨 둠) */
+if (/[?&]reset\b/.test(location.search)) {
+  try { Object.keys(localStorage).forEach(function (k) { if (/^jmb_(shell|data)_/.test(k)) localStorage.removeItem(k); }); } catch (e) {}
+  var jobs = [];
+  if ('serviceWorker' in navigator) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+  if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+  Promise.all(jobs).catch(function () {}).then(function () { location.replace(location.pathname); });
+  window.JMB_RESETTING = true;   // 아래 시작 코드는 건너뜀
+}
+
+var CFG = window.JMB_CONFIG || {};   // config.js 를 못 읽었으면 start() 에서 안내
 var API = CFG.api;
 var SHELL_KEY = 'jmb_shell_v2';   // 기기에 저장해 두는 화면 코드 {html, v, title}
 var DATA_KEY = 'jmb_data_v2';     // 기기에 저장해 두는 데이터 {v, d}  (화면 코드 Index.html 과 같은 이름)
@@ -56,7 +67,7 @@ window.JMB_GETDATA = function (pw, fresh, ver) {
 };
 
 /* ① 가장 먼저: 데이터 요청 시작 (화면 코드를 기다리지 않음) */
-(function () {
+if (API && !window.JMB_RESETTING) (function () {
   var c = lsGetJSON(DATA_KEY);
   window.JMB_EARLY = window.JMB_GETDATA('', false, c && c.v ? c.v : '');
   window.JMB_EARLY.catch(function () {});   // 처리되지 않은 오류 경고 방지 (실제 처리는 화면 코드에서)
@@ -151,7 +162,10 @@ function boot(shell) {
 
 function fail(e) {
   var b = document.getElementById('boot');
-  b.innerHTML = '<div class="msg">불러오지 못했어요<br><small>' + escHtml(e && e.message ? e.message : e) + '</small></div><button onclick="location.reload()">다시 시도</button>';
+  if (!b) return;
+  b.innerHTML = '<div class="msg">불러오지 못했어요<br><small>' + escHtml(e && e.message ? e.message : e) + '</small></div>' +
+    '<button onclick="location.reload()">다시 시도</button>' +
+    '<button onclick="location.replace(location.pathname + \'?reset\')">초기화하고 다시 열기</button>';
 }
 
 /* 화면 코드 받기: ?api=page&v=<기기 버전> → {v, r:{html,title}} 또는 {same:true} */
@@ -184,6 +198,8 @@ function handleKakaoRedirect() {
 }
 
 function start() {
+  if (window.JMB_RESETTING) return;
+  if (!API) return fail(new Error('설정 파일(config.js)을 읽지 못했어요'));
   var cached = lsGetJSON(SHELL_KEY);
   if (cached && cached.html) {
     // ② 저장된 화면으로 바로 시작. 페이지를 다 읽은 뒤에 바꿔 써야 이 시작 화면이 깨끗이 지워짐
@@ -192,7 +208,8 @@ function start() {
       setTimeout(function () {
         fetchShell(cached.v).then(function (s) { if (s) lsPutJSON(SHELL_KEY, s); }).catch(function () {});
       }, 4000);
-      boot(cached);
+      try { boot(cached); }
+      catch (e) { try { localStorage.removeItem(SHELL_KEY); } catch (x) {} location.reload(); }   // 저장된 화면이 깨졌으면 지우고 새로 받기
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(go, 0); });
     else setTimeout(go, 0);
@@ -206,9 +223,9 @@ function start() {
   }).catch(fail);
 }
 
-handleKakaoRedirect().then(start, start); // 로그인 복귀 처리 → 화면 시작
+if (!window.JMB_RESETTING) handleKakaoRedirect().then(start, start); // 로그인 복귀 처리 → 화면 시작
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') { // 정적 파일 캐시 (재방문 속도)
+if (!window.JMB_RESETTING && 'serviceWorker' in navigator && location.protocol === 'https:') { // 정적 파일 캐시 (재방문 속도)
   window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
 }
 try { localStorage.removeItem('jmb_shell_v1'); } catch (e) {}   // 예전 형식 정리
