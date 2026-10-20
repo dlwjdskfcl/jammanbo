@@ -85,7 +85,13 @@ function fail(e) {
 (function start() {
   var cached = null;
   try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { cached = null; }
-  if (cached && cached.html) return boot(cached.html, '', cached.title, true);   // 화면은 바로, 데이터는 화면이 따로 불러옴
+  if (cached && cached.html) {   // 화면은 바로, 데이터는 화면이 따로 불러옴
+    // 페이지를 다 읽은 뒤에 바꿔 써야 이 시작 화면이 깨끗이 지워짐 (읽는 중에 쓰면 기존 화면 안에 덧붙여짐)
+    var go = function () { boot(cached.html, '', cached.title, true); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(go, 0); });
+    else setTimeout(go, 0);
+    return;
+  }
   fetch(API + '?api=page').then(function (r) { return r.json(); }).then(function (j) {
     if (!j || !j.ok || !j.r || !j.r.html) throw new Error((j && j.e) || '화면 코드를 받지 못했어요');
     try { localStorage.setItem(KEY, JSON.stringify({ html: j.r.html, title: j.r.title, at: Date.now() })); } catch (e) {}
