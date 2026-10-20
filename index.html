@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>잠만보 보드게임 모임</title>
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  html,body{margin:0;height:100%;background:#f6f7fb;color:#1b1f2a;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif}
+  @media (prefers-color-scheme: dark){html,body{background:#0f1117;color:#eceef4}}
+  #boot{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;padding:0 16px;text-align:center}
+  #boot img{width:72px;height:72px;border-radius:16px}
+  #boot .msg{font-size:15px;opacity:.75}
+  #boot button{font:inherit;padding:8px 16px;border-radius:10px;border:1px solid #c9cde0;background:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="boot"><img src="icon-192.png" alt=""><div class="msg">잠만보 불러오는 중…</div></div>
+<script>
+/*
+ * 잠만보 보드게임 모임 — GitHub Pages 시작 페이지
+ * 화면 코드(Index.html)와 데이터는 구글 Apps Script 웹앱에서 받아 옵니다.
+ * 화면을 고칠 때는 Apps Script의 Index.html만 고치고 '새 버전 배포'하면 됩니다 (이 파일은 그대로).
+ */
+var API = 'https://script.google.com/macros/s/AKfycbxFkPB3WlcHsXp0v36g64Bsbeh-KpGcn5oNuTAFQX_57z7yUZRkBU7OK4g3X-HsJGqr/exec';
+var KEY = 'jmb_shell_v1';   // 이 기기에 저장해 두는 화면 코드 (다음에 열 때 바로 뜨게)
+
+/* 기존 화면 코드의 google.script.run 호출을 fetch로 바꿔 주는 코드 (화면 안에 넣음) */
+function shim(API, KEY, refreshShell) {
+  function call(fn, args) {
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+      .then(function (r) { if (!r.ok) throw new Error('서버 응답 오류 (' + r.status + ')'); return r.json(); })
+      .then(function (j) { if (!j || !j.ok) throw new Error((j && j.e) || '알 수 없는 오류'); return j.r; },
+            function (e) { throw (e instanceof TypeError) ? new Error('인터넷 연결을 확인해 주세요') : e; });
+  }
+  function runner(ok, fail) {
+    return new Proxy({}, { get: function (_, k) {
+      if (k === 'withSuccessHandler') return function (f) { return runner(f, fail); };
+      if (k === 'withFailureHandler') return function (f) { return runner(ok, f); };
+      if (k === 'withUserObject') return function () { return runner(ok, fail); };
+      if (typeof k !== 'string') return undefined;
+      return function () {
+        var a = Array.prototype.slice.call(arguments);
+        call(k, a).then(function (r) { if (ok) ok(r); }, function (e) { if (fail) fail(e); else console.error(e); });
+      };
+    } });
+  }
+  window.google = window.google || {};
+  window.google.script = { run: runner(null, null) };
+  if (refreshShell) {   // 저장해 둔 화면으로 열었으면, 뒤에서 최신 화면 코드를 받아 다음 번을 위해 저장
+    setTimeout(function () {
+      fetch(API + '?api=page&nodata=1').then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.ok && j.r && j.r.html) { try { localStorage.setItem(KEY, JSON.stringify({ html: j.r.html, title: j.r.title, at: Date.now() })); } catch (e) {} }
+      }).catch(function () {});
+    }, 5000);
+  }
+}
+
+function escHtml(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+function boot(html, pre, title, fromCache) {
+  var head =
+    '<meta name="theme-color" content="#4f46e5">' +
+    '<link rel="manifest" href="manifest.webmanifest">' +
+    '<link rel="icon" type="image/png" href="icon-192.png">' +
+    '<link rel="apple-touch-icon" href="apple-touch-icon.png">' +
+    '<meta name="apple-mobile-web-app-capable" content="yes">' +
+    '<meta name="mobile-web-app-capable" content="yes">' +
+    '<meta name="apple-mobile-web-app-title" content="잠만보">' +
+    '<script>(' + shim.toString() + ')(' + JSON.stringify(API) + ',' + JSON.stringify(KEY) + ',' + (fromCache ? 'true' : 'false') + ');<\/script>';
+  html = html.replace('__PRELOAD__', function () { return pre || ''; });
+  html = html.replace(/<head[^>]*>/i, function (m) { return m + head; });
+  if (title) html = html.replace(/<title>[^<]*<\/title>/i, function () { return '<title>' + escHtml(title) + '</title>'; });
+  document.open(); document.write(html); document.close();
+}
+
+function fail(e) {
+  var b = document.getElementById('boot');
+  b.innerHTML = '<div class="msg">불러오지 못했어요<br><small>' + escHtml(e && e.message ? e.message : e) + '</small></div><button onclick="location.reload()">다시 시도</button>';
+}
+
+(function start() {
+  var cached = null;
+  try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { cached = null; }
+  if (cached && cached.html) return boot(cached.html, '', cached.title, true);   // 화면은 바로, 데이터는 화면이 따로 불러옴
+  fetch(API + '?api=page').then(function (r) { return r.json(); }).then(function (j) {
+    if (!j || !j.ok || !j.r || !j.r.html) throw new Error((j && j.e) || '화면 코드를 받지 못했어요');
+    try { localStorage.setItem(KEY, JSON.stringify({ html: j.r.html, title: j.r.title, at: Date.now() })); } catch (e) {}
+    boot(j.r.html, j.r.pre, j.r.title, false);
+  }).catch(fail);
+})();
+</script>
+</body>
+</html>
