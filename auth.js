@@ -1,4 +1,4 @@
-/*! 잠만보 계정 모듈 v1.0.0 — 로그인(카카오 · 운영진) · 닉네임 연결
+/*! 잠만보 계정 모듈 v1.1.0 — 로그인(카카오 · 운영진) · 닉네임 연결 · 운영진 연동 관리
  *
  * 앱 화면(Apps Script Index.html)이 열린 뒤 시작 페이지(index.html)가 이 파일을 끼워 넣습니다.
  * 앱 코드를 고치지 않고 다음 전역만 사용합니다:
@@ -6,8 +6,10 @@
  *   ADMIN_PW · UI.me · D.byName · openLogin() · lsSet()
  * 어느 하나라도 없으면 그 기능만 조용히 건너뜁니다(앱은 그대로 동작).
  *
- * window.JMB_AUTH: { user(), nickname(), isAdmin(), token(), login(force), logout(), onChange(fn), open() }
+ * window.JMB_AUTH: { user(), nickname(), isAdmin(), token(), login(force), logout(), onChange(fn), open(), manageLinks() }
  * window 이벤트 'jmb:auth' (detail = user | null)
+ *
+ * v1.1: 운영진 → 내 계정 → "카카오 연동 관리"에서 회원별 연결 해제
  */
 (function () {
   'use strict';
@@ -16,10 +18,11 @@
 
   var STORE = cfg.storeKey || 'jmb_kakao_v2';
   var MSG = cfg.msgKey || 'jmb_kakao_msg';
-  var LS_ME = 'jamanbo_me';                 // 앱이 "나"를 기억하는 키
-  var session = readSession();              // { token, user, fresh }
+  var LS_ME = 'jamanbo_me';           // 앱이 "나"를 기억하는 키
+  var session = readSession();        // { token, user, fresh }
   var listeners = [];
-  var link = null;                          // 닉네임 연결 창 상태
+  var link = null;                    // 닉네임 연결 창 상태
+  var mgr = null;                     // 운영진 연동 관리 창 상태
   var hdrHandler = null;
   var obs = null;
 
@@ -36,8 +39,23 @@
     return fetch(cfg.kakaoApi, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args || [] }), signal: ctl ? ctl.signal : undefined })
       .then(function (r) { return r.json(); })
       .then(function (j) { clearTimeout(timer); if (!j || !j.ok) throw new Error((j && j.e) || '알 수 없는 오류'); return j.r; },
-        function (e) { clearTimeout(timer); throw new Error(e && e.name === 'AbortError' ? '응답이 너무 늦어요. 잠시 후 다시 시도해 주세요.' : '인터넷 연결을 확인해 주세요.'); });
+            function (e) { clearTimeout(timer); throw new Error(e && e.name === 'AbortError' ? '응답이 너무 늦어요. 잠시 후 다시 시도해 주세요.' : '인터넷 연결을 확인해 주세요.'); });
   }
+
+  /* ---------- 추가 스타일 (v1.1 연동 관리 목록) ---------- */
+  (function css() {
+    if ($('jmbCss11')) return;
+    var st = document.createElement('style'); st.id = 'jmbCss11';
+    st.textContent =
+      '.jmb-mg{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto;margin:8px 0}' +
+      '.jmb-mg-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line,#e3e6ee);border-radius:10px}' +
+      '.jmb-mg-row .who{flex:1;min-width:0}' +
+      '.jmb-mg-row .who b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.jmb-mg-row .who small{display:block;color:var(--muted,#7c8496);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.jmb-mg-row .tag{font-size:11px;padding:1px 6px;border-radius:6px;background:var(--warn-soft,#fdf1e1);color:var(--warn,#b45309);margin-left:4px}' +
+      '.jmb-mg-row button{flex:none}';
+    document.head.appendChild(st);
+  })();
 
   /* ---------- 앱 도우미 (앱 함수가 없으면 대체) ---------- */
   function say(msg) {
@@ -50,14 +68,13 @@
   function showModal(html) {
     var open = fn('openModal');
     if (open) { open(html); return $('modal'); }
-    var ov = $('jmbOv');                                // 앱 모달이 없을 때의 대체 창
+    var ov = $('jmbOv');               // 앱 모달이 없을 때의 대체 창
     if (!ov) { ov = document.createElement('div'); ov.id = 'jmbOv'; ov.className = 'jmb-ov'; ov.innerHTML = '<div class="jmb-box" id="jmbBox"></div>'; document.body.appendChild(ov); ov.onclick = function (e) { if (e.target === ov) hideModal(); }; }
     $('jmbBox').innerHTML = html; ov.style.display = 'flex';
     [].forEach.call($('jmbBox').querySelectorAll('[data-close]'), function (b) { b.onclick = hideModal; });
     return $('jmbBox');
   }
   function hideModal() { var c = fn('closeModal'); if (c) c(); var ov = $('jmbOv'); if (ov) ov.style.display = 'none'; }
-  function modalRoot() { return $('jmbOv') && $('jmbOv').style.display !== 'none' ? $('jmbBox') : $('modal'); }
   function isModalOpen() { var bg = $('modalBg'); return !!(bg && bg.classList.contains('on')) || !!($('jmbOv') && $('jmbOv').style.display !== 'none'); }
 
   /* ---------- 상태 ---------- */
@@ -81,7 +98,7 @@
     else if (u) { sig = 'l|' + admin; html = avatar(u) + '<span class="jmb-nm">닉네임 연결</span>'; }
     else { sig = 'o|' + admin; html = admin ? '운영진 ✓' : '로그인'; }
     var w = b.firstElementChild;
-    if (!(w && w.className === 'jmb-w' && w.getAttribute('data-sig') === sig)) {   // 앱이 글자를 덮어썼거나 상태가 바뀐 경우에만 다시 그림
+    if (!(w && w.className === 'jmb-w' && w.getAttribute('data-sig') === sig)) {  // 앱이 글자를 덮어썼거나 상태가 바뀐 경우에만 다시 그림
       b.innerHTML = '<span class="jmb-w" data-sig="' + esc(sig) + '">' + html + '</span>';
     }
     b.classList.toggle('primary', admin);
@@ -98,7 +115,7 @@
   }
 
   /* ---------- 앱 데이터와 연결 ---------- */
-  function syncMe() {   // 로그인한 닉네임 = 앱의 "나" (내 기록 · 업적 등에 그대로 반영)
+  function syncMe() {                 // 로그인한 닉네임 = 앱의 "나" (내 기록 · 업적 등에 그대로 반영)
     var u = user(); if (!u || !u.nickname) return;
     var D = window.D, UI = window.UI;
     if (!D || !D.byName || !D.byName[u.nickname] || !UI || UI.me === u.nickname) return;
@@ -125,11 +142,11 @@
 
   /* ---------- 화면: 로그인 ---------- */
   function viewLogin() {
-    var root = showModal(
+    showModal(
       '<h3>로그인<button class="btn sm x" data-close>닫기</button></h3>' +
       '<div class="jmb-login">' +
       '<button class="jmb-kakao" id="jmbKakao">' + KAKAO_SVG + '<span>카카오 로그인</span></button>' +
-      '<p class="jmb-hint">카카오 계정으로 로그인하면 내 닉네임과 연결되어 \'내 기록\'이 자동으로 보여요.</p>' +
+      '<p class="jmb-hint">로그인하면 내 닉네임으로 게임 기록·방명록 등을 남길 수 있어요. (로그인 없이는 보기만 · 익명 글만 가능)</p>' +
       '<div class="jmb-or"><span>또는</span></div>' +
       '<button class="btn jmb-wide" id="jmbAdminToggle" aria-expanded="false">운영진 로그인</button>' +
       '<form class="jmb-admin" id="jmbAdminBox" hidden>' +
@@ -142,13 +159,12 @@
     var box = $('jmbAdminBox'), tg = $('jmbAdminToggle');
     tg.onclick = function () { var open = box.hidden; box.hidden = !open; tg.setAttribute('aria-expanded', String(open)); if (open) $('jmbPw').focus(); };
     box.onsubmit = function (e) { e.preventDefault(); adminLogin($('jmbPw').value, $('jmbPwGo')); };
-    void root;
   }
 
   function adminLogin(pw, btn) {
     if (!pw) return say('비밀번호를 입력해 주세요');
     var api = fn('api'), ld = fn('load');
-    if (!api || !ld) { var ol = fn('openLogin'); if (ol) { hideModal(); ol(); } return; }   // 앱 함수가 없으면 기존 운영진 로그인 창으로
+    if (!api || !ld) { var ol = fn('openLogin'); if (ol) { hideModal(); ol(); } return; }  // 앱 함수가 없으면 기존 운영진 로그인 창으로
     if (btn) btn.disabled = true;
     api('checkAdmin', pw).then(function (ok) {
       if (!ok) { if (btn) btn.disabled = false; return say('비밀번호가 맞지 않아요'); }
@@ -168,7 +184,7 @@
     h += '<div class="jmb-list">';
     if (admin) h += '<span class="badge b-good">운영진 모드</span>';
     h += '</div><div class="jmb-menu">';
-    if (admin) h += '<button class="btn jmb-wide" id="jmbAdminMenu">운영진 메뉴</button><button class="btn jmb-wide" id="jmbAdminOut">운영진 로그아웃</button>';
+    if (admin) h += '<button class="btn jmb-wide" id="jmbAdminMenu">운영진 메뉴</button><button class="btn jmb-wide" id="jmbLinkMgr">카카오 연동 관리</button><button class="btn jmb-wide" id="jmbAdminOut">운영진 로그아웃</button>';
     else h += '<button class="btn jmb-wide" id="jmbAdminIn">운영진 로그인</button>';
     if (u) h += '<button class="btn jmb-wide" id="jmbOut">카카오 로그아웃</button><button class="jmb-link danger" id="jmbUnlink">닉네임 연결 해제</button>';
     else h += '<button class="jmb-kakao" id="jmbKakao">' + KAKAO_SVG + '<span>카카오 로그인</span></button>';
@@ -178,6 +194,7 @@
     on('jmbKakao', function () { startKakao(false); });
     on('jmbAdminIn', function () { viewLogin(); var t = $('jmbAdminToggle'); if (t) t.click(); });
     on('jmbAdminMenu', function () { var ol = fn('openLogin'); hideModal(); if (ol) ol(); });
+    on('jmbLinkMgr', viewManage);
     on('jmbAdminOut', function () { window.ADMIN_PW = null; hideModal(); var ld = fn('load'); (ld ? ld() : Promise.resolve()).then(function () { say('운영진 모드를 껐어요'); changed(); }); });
     on('jmbOut', function () { api_logout(); });
     on('jmbUnlink', function () {
@@ -191,6 +208,56 @@
 
   function api_logout() { session = null; writeSession(); hideModal(); changed(); say('로그아웃했어요'); }
 
+  /* ---------- 화면: 운영진 · 카카오 연동 관리 (v1.1) ---------- */
+  function viewManage() {
+    if (!isAdmin()) return say('운영진 로그인이 필요해요');
+    mgr = { rows: [], q: '', loading: true, err: '', sure: '', busy: '' };
+    showModal(
+      '<h3>카카오 연동 관리<button class="btn sm x" data-close>닫기</button></h3>' +
+      '<p class="jmb-hint">회원 닉네임과 연결된 카카오 계정이에요. 잘못 연결됐거나 본인이 아닌 경우 해제하면, 그 회원이 다시 연결할 수 있어요.</p>' +
+      '<input class="input" id="jmbMgQ" placeholder="닉네임·카카오 이름 검색" autocomplete="off" style="width:100%">' +
+      '<div class="jmb-mg" id="jmbMg" aria-live="polite"></div>' +
+      '<div class="jmb-err" id="jmbMgErr" role="alert"></div>' +
+      '<div class="actions"><button class="btn" id="jmbMgBack">내 계정으로</button></div>');
+    $('jmbMgQ').oninput = function () { mgr.q = this.value.trim(); paintManage(); };
+    $('jmbMgBack').onclick = viewAccount;
+    paintManage();
+    call('kakaoAdminList', [window.ADMIN_PW]).then(function (rows) { if (!mgr) return; mgr.rows = rows; mgr.loading = false; paintManage(); },
+      function (e) { if (!mgr) return; mgr.loading = false; mgr.err = e.message; paintManage(); });
+  }
+
+  function paintManage() {
+    var box = $('jmbMg'); if (!box || !mgr) return;
+    var q = mgr.q.toLowerCase();
+    var list = mgr.rows.filter(function (r) { return !q || (r.current + ' ' + r.nickname + ' ' + r.kakaoNick).toLowerCase().indexOf(q) >= 0; });
+    box.innerHTML = mgr.loading ? '<span class="jmb-mute">불러오는 중…</span>' :
+      !list.length ? '<span class="jmb-mute">' + (mgr.rows.length ? '검색 결과가 없어요' : '연결된 카카오 계정이 없어요') + '</span>' :
+      list.map(function (r) {
+        var sure = mgr.sure === r.kakaoId, busy = mgr.busy === r.kakaoId;
+        return '<div class="jmb-mg-row"><div class="who"><b>' + esc(r.current) +
+          (r.current !== r.nickname ? ' <small style="display:inline">(연결 당시 ' + esc(r.nickname) + ')</small>' : '') +
+          (r.left ? '<span class="tag">탈퇴</span>' : '') + '</b>' +
+          '<small>카카오: ' + esc(r.kakaoNick || '-') + (r.at ? ' · ' + esc(r.at) : '') + '</small></div>' +
+          '<button class="btn sm danger" data-un="' + esc(r.kakaoId) + '"' + (busy ? ' disabled' : '') + '>' + (busy ? '해제 중…' : sure ? '정말 해제?' : '연결 해제') + '</button></div>';
+      }).join('');
+    [].forEach.call(box.querySelectorAll('[data-un]'), function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-un');
+        if (mgr.busy) return;
+        if (mgr.sure !== id) { mgr.sure = id; return paintManage(); }
+        mgr.busy = id; mgr.err = ''; paintManage();
+        var row = mgr.rows.filter(function (r) { return r.kakaoId === id; })[0];
+        call('kakaoAdminUnlink', [window.ADMIN_PW, id]).then(function (rows) {
+          if (!mgr) return;
+          mgr.rows = rows; mgr.sure = ''; mgr.busy = ''; paintManage();
+          say((row ? row.current + '님 ' : '') + '카카오 연결을 해제했어요');
+          if (session && row && session.user && session.user.nickname === row.current) validate();  // 내 연결을 해제했으면 상태 갱신
+        }, function (e) { if (!mgr) return; mgr.busy = ''; mgr.sure = ''; mgr.err = e.message; paintManage(); });
+      };
+    });
+    var er = $('jmbMgErr'); if (er) er.textContent = mgr.err || '';
+  }
+
   /* ---------- 화면: 닉네임 연결 ---------- */
   function viewLink() {
     var u = user(); if (!u) return viewLogin();
@@ -202,7 +269,7 @@
       '<div class="jmb-names" id="jmbNames" role="listbox" aria-label="닉네임 목록"></div>' +
       '<div class="jmb-err" id="jmbErr" role="alert"></div>' +
       '<div class="actions"><button class="btn primary" id="jmbLinkGo" disabled>닉네임을 골라주세요</button></div>' +
-      '<p class="jmb-hint sm">목록에 내 닉네임이 없거나 이미 연결됐다고 나오면 운영진에게 알려 주세요.</p>');
+      '<p class="jmb-hint sm">목록에 내 닉네임이 없거나 이미 연결됐다고 나오면 운영진에게 알려 주세요. (운영진이 연결을 해제해 줄 수 있어요)</p>');
     paintNames();
     $('jmbQ').oninput = function () { link.q = this.value.trim(); paintNames(); };
     $('jmbLinkGo').onclick = doLink;
@@ -270,7 +337,8 @@
     login: startKakao,
     logout: api_logout,
     onChange: function (f) { listeners.push(f); },
-    open: function () { hdrHandler(); }
+    open: function () { hdrHandler(); },
+    manageLinks: viewManage
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

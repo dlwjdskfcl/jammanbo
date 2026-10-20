@@ -12,12 +12,12 @@
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <link rel="dns-prefetch" href="https://kauth.kakao.com">
 <style>
-  html,body{margin:0;height:100%;background:#f6f7fb;color:#1b1f2a;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif}
-  @media (prefers-color-scheme: dark){html,body{background:#0f1117;color:#eceef4}}
-  #boot{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;padding:0 16px;text-align:center}
-  #boot img{width:72px;height:72px;border-radius:16px}
-  #boot .msg{font-size:15px;opacity:.75}
-  #boot button{font:inherit;padding:8px 16px;border-radius:10px;border:1px solid #c9cde0;background:#fff;cursor:pointer}
+ html,body{margin:0;height:100%;background:#f6f7fb;color:#1b1f2a;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif}
+ @media (prefers-color-scheme: dark){html,body{background:#0f1117;color:#eceef4}}
+ #boot{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;padding:0 16px;text-align:center}
+ #boot img{width:72px;height:72px;border-radius:16px}
+ #boot .msg{font-size:15px;opacity:.75}
+ #boot button{font:inherit;padding:8px 16px;border-radius:10px;border:1px solid #c9cde0;background:#fff;cursor:pointer}
 </style>
 <script src="config.js"></script>
 </head>
@@ -25,23 +25,61 @@
 <div id="boot"><img src="icon-192.png" alt=""><div class="msg">잠만보 불러오는 중…</div></div>
 <script>
 /*
- * 잠만보 보드게임 모임 — GitHub Pages 시작 페이지
+ * 잠만보 보드게임 모임 — GitHub Pages 시작 페이지 (v1.1)
  * 화면 코드(Index.html)와 데이터는 구글 Apps Script 웹앱에서 받아 옵니다. (설정값은 config.js)
  * 화면을 고칠 때는 Apps Script의 Index.html만 고치고 '새 버전 배포'하면 됩니다.
  *
  * 로그인(카카오 · 운영진): 카카오 인증이 끝나고 ?code= 로 돌아오면 화면을 띄우기 전에 여기서 로그인 처리를 끝내고,
  * 화면이 뜬 뒤 auth.js 가 우측 상단 버튼과 로그인 창을 붙입니다.
+ *
+ * [v1.1] 권한: 로그인 없이는 조회만 · 로그인하면 자기 닉네임으로만 등록 · 익명 글은 누구나
+ *   회원용 쓰기 요청에는 카카오 세션 토큰을 마지막 인자로 붙여 보내고, 서버(MemberGuard.gs)가 최종 확인합니다.
+ *   여기서 하는 확인은 미리 안내하기 위한 것일 뿐이고, 실제로 막는 건 서버입니다.
  */
 var CFG = window.JMB_CONFIG;
 var API = CFG.api;
-var KEY = 'jmb_shell_v1';   // 이 기기에 저장해 두는 화면 코드 (다음에 열 때 바로 뜨게)
+var KEY = 'jmb_shell_v1'; // 이 기기에 저장해 두는 화면 코드 (다음에 열 때 바로 뜨게)
 var AUTH_STORE = 'jmb_kakao_v2', AUTH_STATE = 'jmb_kakao_state', AUTH_MSG = 'jmb_kakao_msg';
 var AUTH_ON = !!CFG.kakaoApi && !!CFG.kakaoRestKey && CFG.kakaoApi.indexOf('YOUR_') < 0 && CFG.kakaoRestKey.indexOf('YOUR_') < 0;
-var REDIRECT = location.origin + location.pathname.replace(/index\.html$/, '');   // 카카오 개발자 사이트에 등록할 Redirect URI
+var REDIRECT = location.origin + location.pathname.replace(/index\.html$/, ''); // 카카오 개발자 사이트에 등록할 Redirect URI
 
 /* 기존 화면 코드의 google.script.run 호출을 fetch로 바꿔 주는 코드 (화면 안에 넣음) */
-function shim(API, KEY, refreshShell) {
+function shim(API, KEY, refreshShell, STORE) {
+  // 회원용 쓰기 함수 — n: 원래 인자 개수(마지막이 pw), who: 닉네임 인자 위치 (서버 MemberGuard.gs 의 JMB_RULES 와 같게)
+  var MEMBER = {
+    addPost: { n: 4, who: 1, anon: true }, addPlays: { n: 5, who: 1, list: true },
+    toggleOwner: { n: 4, who: 1 }, toggleWish: { n: 3, who: 1 }, rateGame: { n: 5, who: 1 },
+    addAgitGame: { n: 4, who: 1 }, takeAgitGame: { n: 3, who: 1 }, borrowGame: { n: 5, who: 1 },
+    returnGame: { n: 3, who: 1 }, requestRename: { n: 4, who: 0 }
+  };
+  function session() { try { var s = JSON.parse(localStorage.getItem(STORE) || 'null'); return s && s.token ? s : null; } catch (e) { return null; } }
+  function askLogin() { setTimeout(function () { if (window.JMB_AUTH) window.JMB_AUTH.open(); }, 600); }
+  function isAnon(v) { v = String(v == null ? '' : v).trim(); return v === '' || v === '익명'; }
+
+  // 회원 쓰기 요청: 미리 확인(친절한 안내) + 토큰 붙이기. 문제 있으면 오류 메시지를 돌려줌
+  function prepare(fn, a) {
+    var rule = STORE && MEMBER[fn];
+    if (!rule) return null;
+    var s = session();
+    while (a.length < rule.n) a.push('');
+    a.length = rule.n;                          // 원래 인자만 남기고
+    a.push(s ? s.token : '');                   // 마지막에 토큰
+    if (a[rule.n - 1] || window.ADMIN_PW) return null;   // 운영진은 서버가 확인
+    var who = a[rule.who];
+    if (rule.anon && isAnon(who)) return null;
+    if (!s) { askLogin(); return '로그인 후 이용할 수 있어요'; }
+    var me = s.user && s.user.nickname;
+    if (!me) { askLogin(); return '닉네임을 먼저 연결해 주세요'; }
+    var names = rule.list ? (Array.isArray(who) ? who : [who]) : [who];
+    if (!names.length || names.some(function (x) { return String(x).trim() !== me; })) {
+      return rule.list ? '본인(' + me + ') 기록만 등록할 수 있어요. 다른 분 기록은 각자 등록해 주세요.' : '본인 닉네임(' + me + ')으로만 할 수 있어요';
+    }
+    return null;
+  }
+
   function call(fn, args) {
+    var stop = prepare(fn, args);
+    if (stop) return Promise.reject(new Error(stop));
     return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
       .then(function (r) { if (!r.ok) throw new Error('서버 응답 오류 (' + r.status + ')'); return r.json(); })
       .then(function (j) { if (!j || !j.ok) throw new Error((j && j.e) || '알 수 없는 오류'); return j.r; },
@@ -61,7 +99,7 @@ function shim(API, KEY, refreshShell) {
   }
   window.google = window.google || {};
   window.google.script = { run: runner(null, null) };
-  if (refreshShell) {   // 저장해 둔 화면으로 열었으면, 뒤에서 최신 화면 코드를 받아 다음 번을 위해 저장
+  if (refreshShell) { // 저장해 둔 화면으로 열었으면, 뒤에서 최신 화면 코드를 받아 다음 번을 위해 저장
     setTimeout(function () {
       fetch(API + '?api=page&nodata=1').then(function (r) { return r.json(); }).then(function (j) {
         if (j && j.ok && j.r && j.r.html) { try { localStorage.setItem(KEY, JSON.stringify({ html: j.r.html, title: j.r.title, at: Date.now() })); } catch (e) {} }
@@ -87,7 +125,7 @@ function boot(html, pre, title, fromCache) {
     '<meta name="apple-mobile-web-app-capable" content="yes">' +
     '<meta name="mobile-web-app-capable" content="yes">' +
     '<meta name="apple-mobile-web-app-title" content="잠만보">' +
-    '<script>(' + shim.toString() + ')(' + JSON.stringify(API) + ',' + JSON.stringify(KEY) + ',' + (fromCache ? 'true' : 'false') + ');<\/script>' + auth;
+    '<script>(' + shim.toString() + ')(' + JSON.stringify(API) + ',' + JSON.stringify(KEY) + ',' + (fromCache ? 'true' : 'false') + ',' + JSON.stringify(AUTH_ON ? AUTH_STORE : '') + ');<\/script>' + auth;
   html = html.replace('__PRELOAD__', function () { return pre || ''; });
   html = html.replace(/<head[^>]*>/i, function (m) { return m + head; });
   if (title) html = html.replace(/<title>[^<]*<\/title>/i, function () { return '<title>' + escHtml(title) + '</title>'; });
@@ -104,7 +142,7 @@ function handleKakaoRedirect() {
   if (!AUTH_ON) return Promise.resolve();
   var p = new URLSearchParams(location.search), code = p.get('code'), err = p.get('error');
   if (!code && !err) return Promise.resolve();
-  history.replaceState(null, '', location.pathname + location.hash);   // 주소에서 code 제거 (새로고침 시 재사용 방지)
+  history.replaceState(null, '', location.pathname + location.hash); // 주소에서 code 제거 (새로고침 시 재사용 방지)
   function msg(t) { try { localStorage.setItem(AUTH_MSG, t); } catch (e) {} }
   if (err) { msg('카카오 로그인이 취소됐어요'); return Promise.resolve(); }
   var saved = null;
@@ -123,7 +161,7 @@ function handleKakaoRedirect() {
 function start() {
   var cached = null;
   try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { cached = null; }
-  if (cached && cached.html) {   // 화면은 바로, 데이터는 화면이 따로 불러옴
+  if (cached && cached.html) { // 화면은 바로, 데이터는 화면이 따로 불러옴
     // 페이지를 다 읽은 뒤에 바꿔 써야 이 시작 화면이 깨끗이 지워짐 (읽는 중에 쓰면 기존 화면 안에 덧붙여짐)
     var go = function () { boot(cached.html, '', cached.title, true); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(go, 0); });
@@ -137,9 +175,9 @@ function start() {
   }).catch(fail);
 }
 
-handleKakaoRedirect().then(start, start);   // 로그인 복귀 처리 → 화면 시작
+handleKakaoRedirect().then(start, start); // 로그인 복귀 처리 → 화면 시작
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') {   // 정적 파일 캐시 (재방문 속도)
+if ('serviceWorker' in navigator && location.protocol === 'https:') { // 정적 파일 캐시 (재방문 속도)
   window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
 }
 </script>

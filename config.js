@@ -1,6 +1,6 @@
 /* 잠만보 설정 — 배포할 때 이 파일만 고치면 됩니다. (비밀 값은 여기 넣지 마세요: Client Secret · SESSION_SECRET 은 Apps Script 스크립트 속성에만) */
 window.JMB_CONFIG = {
-  version: '1.0.0',
+  version: '1.1.0',   // 바꾸면 auth.js/auth.css 캐시가 새로 받아짐
 
   /* 기존 앱(화면 코드·데이터)을 제공하는 Apps Script 웹앱 */
   api: 'https://script.google.com/macros/s/AKfycbxFkPB3WlcHsXp0v36g64Bsbeh-KpGcn5oNuTAFQX_57z7yUZRkBU7OK4g3X-HsJGqr/exec',
