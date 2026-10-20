@@ -8,6 +8,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="dns-prefetch" href="https://kauth.kakao.com">
 <style>
   html,body{margin:0;height:100%;background:#f6f7fb;color:#1b1f2a;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif}
   @media (prefers-color-scheme: dark){html,body{background:#0f1117;color:#eceef4}}
@@ -16,17 +19,25 @@
   #boot .msg{font-size:15px;opacity:.75}
   #boot button{font:inherit;padding:8px 16px;border-radius:10px;border:1px solid #c9cde0;background:#fff;cursor:pointer}
 </style>
+<script src="config.js"></script>
 </head>
 <body>
 <div id="boot"><img src="icon-192.png" alt=""><div class="msg">잠만보 불러오는 중…</div></div>
 <script>
 /*
  * 잠만보 보드게임 모임 — GitHub Pages 시작 페이지
- * 화면 코드(Index.html)와 데이터는 구글 Apps Script 웹앱에서 받아 옵니다.
- * 화면을 고칠 때는 Apps Script의 Index.html만 고치고 '새 버전 배포'하면 됩니다 (이 파일은 그대로).
+ * 화면 코드(Index.html)와 데이터는 구글 Apps Script 웹앱에서 받아 옵니다. (설정값은 config.js)
+ * 화면을 고칠 때는 Apps Script의 Index.html만 고치고 '새 버전 배포'하면 됩니다.
+ *
+ * 로그인(카카오 · 운영진): 카카오 인증이 끝나고 ?code= 로 돌아오면 화면을 띄우기 전에 여기서 로그인 처리를 끝내고,
+ * 화면이 뜬 뒤 auth.js 가 우측 상단 버튼과 로그인 창을 붙입니다.
  */
-var API = 'https://script.google.com/macros/s/AKfycbxFkPB3WlcHsXp0v36g64Bsbeh-KpGcn5oNuTAFQX_57z7yUZRkBU7OK4g3X-HsJGqr/exec';
+var CFG = window.JMB_CONFIG;
+var API = CFG.api;
 var KEY = 'jmb_shell_v1';   // 이 기기에 저장해 두는 화면 코드 (다음에 열 때 바로 뜨게)
+var AUTH_STORE = 'jmb_kakao_v2', AUTH_STATE = 'jmb_kakao_state', AUTH_MSG = 'jmb_kakao_msg';
+var AUTH_ON = !!CFG.kakaoApi && !!CFG.kakaoRestKey && CFG.kakaoApi.indexOf('YOUR_') < 0 && CFG.kakaoRestKey.indexOf('YOUR_') < 0;
+var REDIRECT = location.origin + location.pathname.replace(/index\.html$/, '');   // 카카오 개발자 사이트에 등록할 Redirect URI
 
 /* 기존 화면 코드의 google.script.run 호출을 fetch로 바꿔 주는 코드 (화면 안에 넣음) */
 function shim(API, KEY, refreshShell) {
@@ -62,6 +73,12 @@ function shim(API, KEY, refreshShell) {
 function escHtml(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
 function boot(html, pre, title, fromCache) {
+  var v = encodeURIComponent(CFG.version || '1');
+  var auth = AUTH_ON
+    ? '<script>window.JMB_CONFIG=' + JSON.stringify({ version: CFG.version, kakaoApi: CFG.kakaoApi, kakaoRestKey: CFG.kakaoRestKey, redirect: REDIRECT, storeKey: AUTH_STORE, stateKey: AUTH_STATE, msgKey: AUTH_MSG }).replace(/</g, '\\u003c') + ';<\/script>' +
+      '<link rel="stylesheet" href="auth.css?v=' + v + '">' +
+      '<script src="auth.js?v=' + v + '" defer><\/script>'
+    : '';
   var head =
     '<meta name="theme-color" content="#4f46e5">' +
     '<link rel="manifest" href="manifest.webmanifest">' +
@@ -70,7 +87,7 @@ function boot(html, pre, title, fromCache) {
     '<meta name="apple-mobile-web-app-capable" content="yes">' +
     '<meta name="mobile-web-app-capable" content="yes">' +
     '<meta name="apple-mobile-web-app-title" content="잠만보">' +
-    '<script>(' + shim.toString() + ')(' + JSON.stringify(API) + ',' + JSON.stringify(KEY) + ',' + (fromCache ? 'true' : 'false') + ');<\/script>';
+    '<script>(' + shim.toString() + ')(' + JSON.stringify(API) + ',' + JSON.stringify(KEY) + ',' + (fromCache ? 'true' : 'false') + ');<\/script>' + auth;
   html = html.replace('__PRELOAD__', function () { return pre || ''; });
   html = html.replace(/<head[^>]*>/i, function (m) { return m + head; });
   if (title) html = html.replace(/<title>[^<]*<\/title>/i, function () { return '<title>' + escHtml(title) + '</title>'; });
@@ -82,7 +99,28 @@ function fail(e) {
   b.innerHTML = '<div class="msg">불러오지 못했어요<br><small>' + escHtml(e && e.message ? e.message : e) + '</small></div><button onclick="location.reload()">다시 시도</button>';
 }
 
-(function start() {
+/* 카카오에서 ?code= 를 달고 돌아왔을 때: 서버에서 로그인 처리 → 세션 저장 (화면은 그다음에 뜸) */
+function handleKakaoRedirect() {
+  if (!AUTH_ON) return Promise.resolve();
+  var p = new URLSearchParams(location.search), code = p.get('code'), err = p.get('error');
+  if (!code && !err) return Promise.resolve();
+  history.replaceState(null, '', location.pathname + location.hash);   // 주소에서 code 제거 (새로고침 시 재사용 방지)
+  function msg(t) { try { localStorage.setItem(AUTH_MSG, t); } catch (e) {} }
+  if (err) { msg('카카오 로그인이 취소됐어요'); return Promise.resolve(); }
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(AUTH_STATE) || 'null'); localStorage.removeItem(AUTH_STATE); } catch (e) {}
+  if (!saved || saved.s !== p.get('state') || Date.now() - saved.t > 10 * 60 * 1000) { msg('로그인 요청이 올바르지 않아요. 다시 시도해 주세요.'); return Promise.resolve(); }
+  return fetch(CFG.kakaoApi, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: 'kakaoLogin', args: [code, REDIRECT] }) })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.e) || '로그인에 실패했어요');
+      try { localStorage.setItem(AUTH_STORE, JSON.stringify({ token: j.r.token, user: j.r.user, fresh: true })); } catch (e) {}
+      try { sessionStorage.removeItem('jmb_link_prompt'); } catch (e) {}
+    })
+    .catch(function (e) { msg(e && e.message ? e.message : '로그인에 실패했어요'); });
+}
+
+function start() {
   var cached = null;
   try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { cached = null; }
   if (cached && cached.html) {   // 화면은 바로, 데이터는 화면이 따로 불러옴
@@ -97,7 +135,13 @@ function fail(e) {
     try { localStorage.setItem(KEY, JSON.stringify({ html: j.r.html, title: j.r.title, at: Date.now() })); } catch (e) {}
     boot(j.r.html, j.r.pre, j.r.title, false);
   }).catch(fail);
-})();
+}
+
+handleKakaoRedirect().then(start, start);   // 로그인 복귀 처리 → 화면 시작
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {   // 정적 파일 캐시 (재방문 속도)
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
 </script>
 </body>
 </html>
