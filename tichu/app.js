@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.6.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.8.4';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay';
@@ -67,6 +67,74 @@
     g.gain.setValueAtTime(vol || 0.1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
     src.connect(fl); fl.connect(g); g.connect(c.destination); src.start(t); src.stop(t + d + 0.05);
   }
+  // 개 짖는 소리 한 번: 목소리(톱니파가 위로 갔다 뚝 떨어짐) + 숨소리(걸러낸 잡음). p: 음 높이 배율 (세 번이 조금씩 다르게)
+  function bark(c, t, p) {
+    var o = c.createOscillator(), fl = c.createBiquadFilter(), g = c.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(380 * p, t);
+    o.frequency.exponentialRampToValueAtTime(720 * p, t + 0.035);
+    o.frequency.exponentialRampToValueAtTime(260 * p, t + 0.15);
+    fl.type = 'bandpass'; fl.frequency.value = 1100 * p; fl.Q.value = 1.2;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(fl); fl.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.2);
+    noise(c, t, 0.07, 0.05, 1800);
+  }
+  // 참새 '짹' 한 번: 아주 높은 음이 순간적으로 치솟았다 떨어짐. p: 음 높이 배율
+  function chirp(c, t, p) {
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(3200 * p, t);
+    o.frequency.exponentialRampToValueAtTime(5200 * p, t + 0.025);
+    o.frequency.exponentialRampToValueAtTime(2800 * p, t + 0.06);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.08, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.1);
+  }
+  // 봉황 울음 '끼요오~': 높이 치솟았다가 떨리며(비브라토) 길게 내려옴. 한 옥타브 위 소리를 살짝 겹침
+  function cry(c, t) {
+    var g = c.createGain(), hi = c.createGain(), lfo = c.createOscillator(), depth = c.createGain(), oscs = [];
+    lfo.frequency.value = 7; depth.gain.value = 70; lfo.connect(depth);
+    [1, 2].forEach(function (m) {
+      var o = c.createOscillator();
+      o.type = m === 1 ? 'triangle' : 'sine';
+      o.frequency.setValueAtTime(1300 * m, t);
+      o.frequency.exponentialRampToValueAtTime(2300 * m, t + 0.12);
+      o.frequency.exponentialRampToValueAtTime(1500 * m, t + 0.9);
+      depth.connect(o.frequency);
+      o.connect(m === 1 ? g : hi);
+      oscs.push(o);
+    });
+    hi.gain.value = 0.3; hi.connect(g);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.05);
+    g.gain.setValueAtTime(0.07, t + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+    g.connect(c.destination);
+    oscs.concat([lfo]).forEach(function (o) { o.start(t); o.stop(t + 1.05); });
+  }
+  // 용 포효 '크아앙': 낮은 톱니파가 부풀었다 가라앉음 + 그르렁(소리 크기를 빠르게 흔듦) + 거친 숨(잡음)
+  function roar(c, t) {
+    var o = c.createOscillator(), fl = c.createBiquadFilter(), amp = c.createGain(), g = c.createGain(), trem = c.createOscillator(), tg = c.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t);
+    o.frequency.exponentialRampToValueAtTime(150, t + 0.25);
+    o.frequency.exponentialRampToValueAtTime(55, t + 1.2);
+    fl.type = 'lowpass'; fl.Q.value = 4;
+    fl.frequency.setValueAtTime(400, t);
+    fl.frequency.exponentialRampToValueAtTime(1400, t + 0.25);
+    fl.frequency.exponentialRampToValueAtTime(300, t + 1.2);
+    trem.frequency.value = 28; tg.gain.value = 0.5; amp.gain.value = 0.6; trem.connect(tg); tg.connect(amp.gain);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.15);
+    g.gain.setValueAtTime(0.25, t + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.25);
+    o.connect(fl); fl.connect(amp); amp.connect(g); g.connect(c.destination);
+    [o, trem].forEach(function (x) { x.start(t); x.stop(t + 1.3); });
+    noise(c, t + 0.05, 1.1, 0.12, 900);
+  }
   function seq(c, t, notes, step, dur, type, vol) { notes.forEach(function (f, i) { tone(c, f, t + i * step, dur, type, vol); }); }
   var N = { G4: 392, C5: 523.25, E5: 659.25, G5: 783.99, A5: 880, B5: 987.77, C6: 1046.5, D6: 1174.7, E6: 1318.5, G6: 1568 };
   function sfx(name, delay) {
@@ -84,10 +152,12 @@
       case 'sf': noise(c, t, 1.0, 0.3, 500); tone(c, 80, t, 0.9, 'sawtooth', 0.12, 30); seq(c, t + 0.15, [N.C5, N.E5, N.G5, N.C6, N.E6, N.G6], 0.05, 0.25, 'square', 0.035); break;
       case 'combo': noise(c, t, 0.05, 0.04, 2600); seq(c, t, [N.C5, N.E5, N.G5, N.C6], 0.055, 0.18, 'triangle', 0.05); break;   // 트리플·스트레이트·연속 페어
       case 'bigcombo': noise(c, t, 0.05, 0.05, 2600); seq(c, t, [N.C5, N.E5, N.G5, N.B5, N.D6, N.E6, N.G6], 0.045, 0.2, 'triangle', 0.05); break;   // 긴 스트레이트·풀하우스
-      case 'dragon': tone(c, 110, t, 0.7, 'sawtooth', 0.06, 60); noise(c, t, 0.6, 0.07, 700); seq(c, t + 0.28, [N.G5, N.B5, N.D6, N.G6], 0.07, 0.3, 'triangle', 0.05); break;
-      case 'phoenix': seq(c, t, [N.A5, 1108.7, N.E6, 1760], 0.05, 0.35, 'sine', 0.045); tone(c, 2200, t + 0.2, 0.4, 'sine', 0.02, 3300); break;
-      case 'dog': tone(c, 520, t, 0.08, 'square', 0.035, 340); tone(c, 560, t + 0.13, 0.1, 'square', 0.035, 330); break;
-      case 'bird': tone(c, 2000, t, 0.06, 'sine', 0.04, 2700); tone(c, 2300, t + 0.09, 0.08, 'sine', 0.04, 3000); break;
+      case 'dragon': roar(c, t); break;                                                                       // 크아앙
+      case 'phoenix': cry(c, t); seq(c, t + 0.5, [2637, 3136, 3951], 0.07, 0.25, 'sine', 0.015); break;         // 끼요오~ + 반짝
+      case 'dog': [0, 0.2, 0.42].forEach(function (d, i) { bark(c, t + d, [1, 1.08, 0.94][i]); }); break;   // 왈왈왈
+      case 'join': tone(c, N.E5, t, 0.35, 'sine', 0.07); tone(c, N.C5, t + 0.22, 0.5, 'sine', 0.07); break;     // 딩동 — 누가 자리에 앉음
+      case 'watch': tone(c, N.G5, t, 0.18, 'sine', 0.035, N.C6); break;                                     // 관전자 들어옴 (작게)
+      case 'bird': [0, 0.13, 0.22].forEach(function (d, i) { chirp(c, t + d, [1, 1.06, 0.97][i]); }); break;   // 짹 짹짹
       case 'bomb': noise(c, t, 0.9, 0.3, 380); tone(c, 95, t, 0.8, 'sawtooth', 0.12, 32); tone(c, 60, t + 0.05, 0.9, 'sine', 0.15, 30); break;
       case 'turn': tone(c, N.E5, t, 0.15, 'sine', 0.08); tone(c, N.A5, t + 0.12, 0.25, 'sine', 0.08); if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} } break;
       case 'trickUs': seq(c, t, [N.E5, N.G5], 0.07, 0.16, 'sine', 0.05); break;
@@ -121,7 +191,7 @@
   function vr(r) { return VOICE_R[r] || String(r); }
   function comboVoice(c) {
     if (!c) return '';
-    if (c.t === 'dog') return '개';
+    if (c.t === 'dog') return '왈왈왈';
     if (c.t === 'single') return c.r === 15 ? '용' : c.ph ? '봉황' : c.r === 1 ? '참새' : vr(c.r);
     if (c.t === 'pair') return vr(c.r) + ' 페어';
     if (c.t === 'triple') return vr(c.r) + ' 트리플';
@@ -298,6 +368,7 @@
     var r = parseHash();
     closeModal();
     if (r.name !== 'room' && S.room) { S.rank = null; S.rec = null; }   // 방에서 나오면 전적 새로 (레벨업 알림)
+    if (r.name !== 'room' && S.room && S.room.me < 0) api('leave', { room: S.room.id, watch: 1 }).catch(function () {});   // 관전자 목록에서 바로 빠짐
     if (r.name !== 'room') { if (S.room) hush(); stopPoll(); S.room = null; S.roomId = null; S.guard = false; S.pollSeq++; S.polling = false; }
     S.route = r;
     clearInterval(S.lobbyT);
@@ -352,8 +423,8 @@
     var bp = $('#bPractice'); if (bp) bp.onclick = function () { practice(bp); };
     var br = $('#bRefresh'); if (br) br.onclick = function () { loadLobby(true); };
     $$('[data-rsort]').forEach(function (b) { b.onclick = function () { S.rankSort = b.getAttribute('data-rsort'); renderLobby(); }; });
-    $$('[data-join]').forEach(function (b) { b.onclick = function () { joinRoom(b.getAttribute('data-join'), b.getAttribute('data-lock') === '1'); }; });
-    $$('[data-watch]').forEach(function (b) { b.onclick = function () { location.hash = '#/room/' + b.getAttribute('data-watch'); }; });
+    $$('[data-join]').forEach(function (b) { b.onclick = function () { S.roomPw = ''; joinRoom(b.getAttribute('data-join'), b.getAttribute('data-lock') === '1'); }; });
+    $$('[data-watch]').forEach(function (b) { b.onclick = function () { S.roomPw = ''; watchRoom(b.getAttribute('data-watch'), b.getAttribute('data-lock') === '1'); }; });
   }
   function accountMenu() {
     openModal('<h2>' + esc(S.user.name) + '<button class="x" data-x>✕</button></h2>' +
@@ -402,9 +473,10 @@
     if (!S.lobby.length) return h + '<div class="empty">열린 방이 없어요.<br>방을 만들고 단톡방에 초대 링크를 보내 보세요!</div>';
     h += '<div class="rooms">' + S.lobby.map(function (r) {
       var filled = r.seats.filter(Boolean).length, st = r.st === 'wait' ? '<span class="st wait">대기 ' + filled + '/4</span>' : r.st === 'play' ? '<span class="st play">진행 중 · ' + r.round + '라운드</span>' : '<span class="st end">끝남</span>';
+      // 관전은 시작 전(대기)에도 · 비밀방도 비밀번호를 알면 가능
       var btn = r.mine ? '<button class="btn sm primary" data-watch="' + r.id + '">돌아가기</button>' :
-        r.st === 'wait' && filled < 4 ? '<button class="btn sm primary" data-join="' + r.id + '" data-lock="' + (r.lock ? 1 : 0) + '">입장</button>' :
-        !r.lock ? '<button class="btn sm" data-watch="' + r.id + '">관전</button>' : '';
+        (r.st === 'wait' && filled < 4 ? '<button class="btn sm primary" data-join="' + r.id + '" data-lock="' + (r.lock ? 1 : 0) + '">입장</button> ' : '') +
+        '<button class="btn sm" data-watch="' + r.id + '" data-lock="' + (r.lock ? 1 : 0) + '">관전</button>';
       return '<div class="room-card' + (r.mine ? ' mine' : '') + '"><div class="top"><span class="name">' + (r.lock ? '🔒 ' : '') + esc(r.name) + '</span>' + st + '</div>' +
         '<div class="seats">' + seatLine(r.seats, 0) + seatLine(r.seats, 1) + seatLine(r.seats, 2) + seatLine(r.seats, 3) + '</div>' +
         '<div class="meta"><span>🎯 ' + r.target + '점</span><span>⏱ ' + (r.timer ? r.timer + '초' : '없음') + '</span>' +
@@ -478,7 +550,22 @@
       $('#jPw').focus();
       $('#jGo').onclick = function () { go($('#jPw').value); };
     }
-    if (lock) ask(); else go('');
+    if (lock && !S.roomPw) ask(); else go(S.roomPw || '');   // 관전하며 이미 비밀번호를 넣었으면 그대로 씀
+  }
+
+  // 관전: 자리에 앉지 않고 보기만. 비밀방이면 비밀번호를 먼저 물어봄 (대기 중이면 관전하다 빈자리를 눌러 앉을 수 있음)
+  function watchRoom(id, lock, wrong) {
+    if (!lock) return goRoom(id);
+    if (S.route.name === 'room' && (!S.room || S.room.id !== id)) app.innerHTML = '<div class="boot"><div>🔒 비밀방이에요</div><a class="btn ghost" href="#/">로비로</a></div>';   // 링크로 들어온 경우 (창을 닫아도 갈 곳)
+    openModal('<h2>' + (wrong ? '비밀번호가 맞지 않아요' : '비밀번호') + '<button class="x" data-x>✕</button></h2>' +
+      '<div class="small" style="margin-bottom:8px">비밀방이에요. 비밀번호를 알면 관전할 수 있어요.</div>' +
+      '<input class="input" id="jPw" maxlength="8" autocomplete="off"><button class="btn primary block" id="jGo" style="margin-top:8px">관전하기</button>');
+    $('#jPw').focus();
+    $('#jGo').onclick = function () { S.roomPw = $('#jPw').value; closeModal(); goRoom(id); };
+  }
+  function goRoom(id) {
+    if (location.hash === '#/room/' + id) { S.pollSeq++; S.polling = false; startPoll(0); }
+    else location.hash = '#/room/' + id;
   }
 
   /* ----- 레벨 · 칭호 · 배지 (잠만보 트레이너 레벨처럼, 전적 숫자로 계산) ----- */
@@ -682,15 +769,22 @@
       S.polling = false;
       netOk();
       if (S.roomId !== id) return startPoll(pollDelay());
-      if (r.same) { if (S.room && r.on) { var ch = false; r.on.forEach(function (o, i) { if (S.room.seats[i] && S.room.seats[i].on !== o) { S.room.seats[i].on = o; ch = true; } }); if (ch) render(); } }
+      if (r.same) {
+        if (S.room && r.on) {
+          var ch = false;
+          r.on.forEach(function (o, i) { if (S.room.seats[i] && S.room.seats[i].on !== o) { S.room.seats[i].on = o; ch = true; } });
+          if (r.w && r.w.join('\n') !== (S.room.watchers || []).join('\n')) { arrivals(S.room, S.room.seats, r.w); S.room.watchers = r.w; ch = true; }   // 관전자는 방 버전과 따로 옴
+          if (ch) render();
+        }
+      }
       else applyRoom(r);
       startPoll(pollDelay());
     }, function (e) {
       if (mySeq !== S.pollSeq) return;
       S.polling = false;
       if (S.roomId !== id) return;
-      if (e.code === 'gone') { toast(e.message, true); location.hash = '#/'; return; }
-      if (e.code === 'pw') { joinRoom(id, true); return; }
+      if (e.code === 'gone' || e.code === 'kicked') { toast(e.message, true); location.hash = '#/'; return; }
+      if (e.code === 'pw') { watchRoom(id, true, !!S.roomPw); return; }   // 초대 링크로 비밀방을 열었을 때: 관전 비밀번호 (예전엔 바로 자리에 앉혔음)
       if (e.code === 'auth' || e.code === 'maint') return;
       if (!S.room) app.innerHTML = '<div class="boot"><div>' + esc(e.message) + '</div><button class="btn" onclick="location.reload()">다시 시도</button><a class="btn ghost" href="#/">로비로</a></div>';
       netFail();
@@ -745,6 +839,16 @@
   function seatName(s) { var st = S.room.seats[s]; return st ? st.name : '?'; }
 
   // 서버 상태가 새로 왔을 때: 효과(배너·소리) → 선택 정리 → 그리기
+  // 누가 들어오면 소리: 사람이 새로 앉으면 '딩동', 관전자가 새로 오면 작은 소리 (자리만 바뀐 건 소리 없음 · 나 자신 제외)
+  function arrivals(prev, seats, watchers) {
+    var mine = S.user && S.user.name;
+    function names(list) { return (list || []).filter(Boolean).map(function (x) { return typeof x === 'string' ? x : x.bot ? '' : x.name; }).filter(function (n) { return n && n !== mine; }); }
+    var hadSeat = names(prev.seats), had = hadSeat.concat(names(prev.watchers));
+    var sat = names(seats).filter(function (n) { return hadSeat.indexOf(n) < 0; });   // 관전하다 앉아도 '들어옴'
+    var came = names(watchers).filter(function (n) { return had.indexOf(n) < 0; });
+    if (sat.length) { sfx('join'); toast('🙋 ' + sat.join(', ') + '님이 들어왔어요'); }
+    else if (came.length) { sfx('watch'); toast('👀 ' + came.join(', ') + '님이 관전 중이에요'); }
+  }
   function applyRoom(r, fresh, mine) {
     var prev = S.room;
     // 예전 상태(낮은 버전)가 오면 한 번은 무시(요청 순서가 뒤바뀐 경우). 연속으로 오면 서버가 되돌아간 것이므로 서버 상태를 따름
@@ -754,6 +858,7 @@
       S.lastSeq = 0;
     }
     S.lowV = 0;
+    if (prev && prev.id === r.id) arrivals(prev, r.seats, r.watchers);
     S.room = r; S.roomId = r.id;
     var g = r.g, me = r.me;
     if (g) {
@@ -853,12 +958,15 @@
     }).join('');
     var full = r.seats.every(Boolean);
     var h = '<div class="shell"><div class="hdr"><button class="iconbtn" id="wBack" aria-label="로비">←</button><div class="title" style="min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.opt.lock ? '🔒 ' : '') + esc(r.name) + '</span></div>' +
+      '<button class="iconbtn" id="wPeople" aria-label="참가자·관전자">👥</button>' +
       '<button class="iconbtn" id="wChat" aria-label="채팅">💬' + (S.unread ? '<span class="badge-dot">' + S.unread + '</span>' : '') + '</button></div>' +
       '<div class="content wait-wrap">' +
       '<div class="wait-info"><span class="chip">🎯 목표 ' + r.opt.target + '점</span><span class="chip">⏱ ' + (r.opt.timer ? '턴 ' + r.opt.timer + '초' : '시간 제한 없음') + '</span><span class="chip">🤖 AI ' + botDelayLabel(botDelayOf(r.opt)) + '</span>' + (r.opt.lock ? '<span class="chip">🔒 비밀방</span>' : '') + '</div>' +
+      watchersHTML(r) + '<div class="idle-note" id="wIdle" hidden></div>' +
       '<div class="wait-table">' + seats + '<div class="wait-center"><b style="font-size:20px">' + r.seats.filter(Boolean).length + ' / 4</b><br>마주 앉은<br>두 사람이 한 팀</div></div>' +
       (r.host ? '<button class="btn primary block" id="wStart" ' + (full ? '' : 'disabled') + '>' + (full ? '게임 시작' : '네 자리가 차면 시작할 수 있어요') + '</button>' +
-        '<div class="row" style="display:flex;gap:8px"><button class="btn block" id="wFill" ' + (full ? 'disabled' : '') + '>빈자리 봇으로 채우기</button><button class="btn block" id="wOpt">방 설정</button></div>'
+        '<div class="row" style="display:flex;gap:8px"><button class="btn block" id="wFill" ' + (full ? 'disabled' : '') + '>🤖 봇 채우기</button>' +
+        '<button class="btn block" id="wShuffle" ' + (r.seats.filter(Boolean).length < 2 ? 'disabled' : '') + '>🎲 랜덤 팀</button><button class="btn block" id="wOpt">방 설정</button></div>'
         : me >= 0 ? '<div class="empty" style="padding:14px">방장(' + esc(r.hostName) + ')이 시작하기를 기다리는 중…</div>' : '<div class="empty" style="padding:14px">관전 중이에요. 빈자리를 눌러 앉을 수 있어요.</div>') +
       '<div style="display:flex;gap:8px"><button class="btn block" id="wInvite">🔗 초대 링크 복사</button>' + (me >= 0 ? '<button class="btn danger block" id="wLeave">나가기</button>' : '') + '</div>' +
       '<div class="sec-title">채팅</div><div class="chatlist" id="wChatList">' + chatItems(r.chat.slice(-8)) + '</div>' +
@@ -869,17 +977,62 @@
     if (focused) { var mi = $('#wMsg'); mi.value = val; mi.focus(); }
     $('#wBack').onclick = function () { location.hash = '#/'; };
     $('#wChat').onclick = openChat;
+    $('#wPeople').onclick = openPeople;
     $('#wInvite').onclick = copyInvite;
     var wl = $('#wLeave'); if (wl) wl.onclick = leaveRoom;
     var ws = $('#wStart'); if (ws) ws.onclick = function () { roomCall('start', {}, ws); };
     var wf = $('#wFill'); if (wf) wf.onclick = function () { fillBots(wf); };
     var wo = $('#wOpt'); if (wo) wo.onclick = optSheet;
+    var wsh = $('#wShuffle'); if (wsh) wsh.onclick = function () { roomCall('shuffle', {}, wsh); };
+    bindKickWatchers(app);
     $$('[data-sit]').forEach(function (b) { b.onclick = function () { var s = +b.getAttribute('data-sit'); if (r.me >= 0) roomCall('seat', { seat: s }, b); else joinRoom(r.id, r.opt.lock, s); }; });
     $$('[data-bot]').forEach(function (b) { b.onclick = function () { roomCall('addBot', { seat: +b.getAttribute('data-bot') }, b); }; });
-    $$('[data-kick]').forEach(function (b) { b.onclick = function () { roomCall('kick', { seat: +b.getAttribute('data-kick') }, b); }; });
+    $$('[data-kick]').forEach(function (b) { b.onclick = function () { kickSeat(+b.getAttribute('data-kick'), b); }; });
     $('#wChatForm').onsubmit = function (e) { e.preventDefault(); sendChat($('#wMsg')); };
     var cl = $('#wChatList'); cl.scrollTop = cl.scrollHeight;
     S.unread = 0;
+  }
+  // 관전자 목록 한 줄 (없으면 빈 문자열 · always: 메뉴처럼 없을 때도 '없음'으로 보여 줄 곳)
+  function watchersHTML(r, always) {
+    var w = r.watchers || [];
+    if (!w.length && !always) return '';
+    var list = !w.length ? '<span>없음</span>'
+      : r.host ? w.map(function (n) { return '<button class="wkick" data-kickw="' + esc(n) + '" title="내보내기">' + esc(n) + ' ✕</button>'; }).join('')   // 방장: 눌러서 내보내기
+      : '<span>' + w.map(esc).join(', ') + '</span>';
+    return '<div class="watchers">👀 관전 ' + w.length + '명' + list + '</div>';
+  }
+  // 👥 참가자 · 관전자 한눈에: 팀별 자리(방장·나·봇·접속 상태) + 관전자(방장은 눌러서 내보내기)
+  function openPeople() {
+    var r = S.room; if (!r) return;
+    var w = r.watchers || [];
+    function seatRow(s) {
+      var st = r.seats[s];
+      if (!st) return '<div class="prow empty">빈자리</div>';
+      var state = st.bot ? '🤖 봇' : !st.on ? '⚪ 연결 끊김' : st.afk ? '💤 자리 비움' : '🟢 접속 중';
+      return '<div class="prow"><b>' + (st.host ? '👑 ' : '') + esc(st.name) + (s === r.me ? ' (나)' : '') + '</b><span>' + state + '</span></div>';
+    }
+    openModal('<h2>👥 참가자 · 관전자<button class="x" data-x>✕</button></h2>' +
+      '<div class="sec-title">참가자 ' + r.seats.filter(Boolean).length + '/4</div>' +
+      '<div class="pteam"><div class="tm tA">A팀</div>' + seatRow(0) + seatRow(2) + '</div>' +
+      '<div class="pteam"><div class="tm tB">B팀</div>' + seatRow(1) + seatRow(3) + '</div>' +
+      '<div class="sec-title">관전자 ' + w.length + '명' + (r.host && w.length ? ' <small>· 이름을 누르면 내보내기</small>' : '') + '</div>' +
+      watchersHTML(r, true).replace(/^<div class="watchers">👀 관전 \d+명/, '<div class="watchers">'));
+    bindKickWatchers(modalEl);
+  }
+  // 내보내기 (방장): 다시 못 들어온다는 걸 확인받고 보냄. 게임 중인 사람은 봇이 이어서 함
+  function kickSeat(s, btn) {
+    var st = S.room.seats[s];
+    if (!st) return;
+    if (!st.bot && !confirm(st.name + '님을 내보낼까요?\n이 방에는 다시 들어올 수 없어요.' + (S.room.status === 'play' ? '\n(남은 게임은 봇이 이어서 해요)' : ''))) return;
+    roomCall('kick', { seat: s }, btn);
+  }
+  function bindKickWatchers(root) {
+    $$('[data-kickw]', root).forEach(function (b) {
+      b.onclick = function () {
+        var n = b.getAttribute('data-kickw');
+        if (confirm(n + '님을 관전에서 내보낼까요?\n이 방에는 다시 들어올 수 없어요.')) roomCall('kick', { watcher: n }, b);
+      };
+    });
   }
   function fillBots(btn) {
     btn.disabled = true;
@@ -985,6 +1138,7 @@
       '<div class="vs">' + g.round + 'R<small>/' + g.target + '</small></div>' +
       '<div class="tm ' + (myTeam ? 'tA' : 'tB') + '"><span>' + scoreThem + '</span><small>' + (me >= 0 ? '상대 · ' : '') + esc(nmThem) + '</small></div></div>' +
       '<button class="iconbtn" id="gSheet" aria-label="점수표">📋</button>' +
+      '<button class="iconbtn" id="gPeople" aria-label="참가자·관전자">👥' + ((r.watchers || []).length ? '<span class="cnt">' + r.watchers.length + '</span>' : '') + '</button>' +
       '<button class="iconbtn" id="gChat" aria-label="채팅">💬' + (S.unread ? '<span class="badge-dot">' + S.unread + '</span>' : '') + '</button></div>';
 
     // 테이블
@@ -1009,7 +1163,7 @@
       h += myBarHTML(g, me, pend, myTurn, top);
       h += '<div class="handwrap"><div class="hand" id="hand"></div></div>';
     } else {
-      h += '<div class="spect">👀 관전 중 · ' + esc(r.name) + (r.status === 'play' ? '' : ' (게임 끝)') + '</div>';
+      h += '<div class="spect">👀 관전 중 · ' + esc(r.name) + (r.status === 'play' ? '' : ' (게임 끝)') + watchersHTML(r) + '</div>';
     }
     h += '</div>';
     app.innerHTML = h;
@@ -1177,6 +1331,7 @@
     var r = S.room, g = r.g, me = r.me;
     $('#gMenu').onclick = gameMenu;
     $('#gSheet').onclick = scoreSheet;
+    $('#gPeople').onclick = openPeople;
     $('#gChat').onclick = openChat;
     var gb = $('#gBack'); if (gb) gb.onclick = function () { act('back', {}, gb); };
     var t1 = $('#gtPass'); if (t1) t1.onclick = function () { act('grand', { call: false }, t1); };
@@ -1337,9 +1492,11 @@
     r.seats.forEach(function (st, s) { if (st && !st.bot && !st.on && s !== r.me) offline.push(s); });
     openModal('<h2>메뉴<button class="x" data-x>✕</button></h2><div class="menu-list">' +
       '<button class="btn block" id="mRules">📖 규칙 보기</button>' +
+      watchersHTML(r, true) +
       '<button class="btn block" id="mInvite">🔗 관전 링크 복사</button>' +
 
       (r.host && r.status === 'play' ? offline.map(function (s) { return '<button class="btn block" data-rep="' + s + '">🤖 ' + esc(seatName(s)) + ' (끊김) → 봇으로</button>'; }).join('') : '') +
+      (r.host && r.status === 'play' ? r.seats.map(function (st, s) { return st && !st.bot && s !== r.me ? '<button class="btn block" data-mkick="' + s + '">🚪 ' + esc(st.name) + ' 내보내기 (봇이 대신)</button>' : ''; }).join('') : '') +
       (r.host ? botDelaySeg(botDelayOf(r.opt)) : '') +
       (r.admin ? '<button class="btn danger block" id="mClose">운영진: 방 닫기</button>' : '') +
       '<button class="btn block" id="mLobby">로비로 (방은 그대로)</button>' +
@@ -1359,6 +1516,8 @@
     var ml = $('#mLeave'); if (ml) ml.onclick = function () { closeModal(); leaveRoom(); };
     var mc = $('#mClose'); if (mc) mc.onclick = function () { if (confirm('이 방을 닫을까요?')) api('adminClose', { room: S.roomId }).then(function () { closeModal(); location.hash = '#/'; }, function (e) { toast(e.message, true); }); };
     $$('[data-rep]', modalEl).forEach(function (b) { b.onclick = function () { closeModal(); roomCall('replace', { seat: +b.getAttribute('data-rep') }); }; });
+    $$('[data-mkick]', modalEl).forEach(function (b) { b.onclick = function () { closeModal(); kickSeat(+b.getAttribute('data-mkick')); }; });
+    bindKickWatchers(modalEl);
   }
 
   function scoreSheet() {
@@ -1408,8 +1567,18 @@
   }
 
   /* ----- 타이머 (0.25초마다 링·막대만 갱신) ----- */
+  // 대기실: 아무 변화 없이 5분이 지나면 서버가 방을 닫음 → 마지막 1분은 남은 시간을 보여 줌 (채팅·자리 이동 등을 하면 다시 5분)
+  function idleTick(r) {
+    var el = $('#wIdle'); if (!el) return;
+    var left = r.idleEnd ? r.idleEnd - now() : Infinity;
+    if (left > 60000 || left <= 0) { el.hidden = true; return; }
+    var sec = Math.ceil(left / 1000);
+    el.hidden = false;
+    el.textContent = '⏳ 아무 움직임이 없어 ' + Math.floor(sec / 60) + ':' + ('0' + sec % 60).slice(-2) + ' 뒤에 방이 닫혀요 · 채팅을 보내면 연장돼요';
+  }
   function tickTimers() {
     var r = S.room;
+    if (r && S.route.name === 'room' && r.status === 'wait') idleTick(r);
     if (!r || S.route.name !== 'room' || !r.g) return;
     var dl = r.dl, total = r.opt.timer * 1000, g = r.g;
     if (g.phase === 'exchange') total = Math.max(total * 2, 40000);
