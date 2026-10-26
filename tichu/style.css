@@ -85,7 +85,7 @@ a { color: var(--gold2); }
 .table-list th, .table-list td { padding: 9px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 .table-list th { color: var(--muted); font-size: 12px; font-weight: 700; }
 .table-list th:nth-child(2), .table-list td:nth-child(2) { text-align: left; }
-.table-list td.n { text-align: left; max-width: 170px; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.table-list td.n { text-align: left; max-width: 110px; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
 .table-list tr.me td { background: rgba(245,179,1,.08); }
 .medal { font-size: 16px; }
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -474,3 +474,12 @@ body.ingame .toasts { top: auto; bottom: calc(var(--ch) + 150px); }
 .spect .seat.p0 { position: static; transform: none; flex-direction: row; width: auto; gap: 6px; }
 .spect .seat.p0 .nm { max-width: 140px; }
 .spect .takes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.chatlist .m.pending { opacity: .55; }
+
+/* 사람전 / AI전 구분 */
+.gkind { font-weight: 700; }
+.gkind.hu { color: var(--gold2); }
+.gkind.ai { color: var(--muted); }
+.table-list th .small, .table-list td .small { font-weight: 400; }
+.table-list tr.prof { cursor: pointer; }
+.table-list tr.prof:hover td { background: rgba(255,255,255,.04); }
