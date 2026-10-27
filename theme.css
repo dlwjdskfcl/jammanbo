@@ -120,6 +120,8 @@ h2 .sub{font-size:13px;font-weight:500;color:var(--muted)}
 .card.today .today-t{color:#fff;font-size:15.5px;margin-top:6px}
 .card.today .today-t b{color:#fff}
 @media (prefers-color-scheme: dark){.card.today{background:linear-gradient(135deg,#1e2763 0%,#2f46a8 60%,#4560d6 100%);box-shadow:none}}
+/* 오늘의 추천 안 실시간 검색어: 파란 바탕이라 강조색을 밝게 */
+.card.today .trend-n.top{color:#ffd84d}
 
 /* 6. 목록·표·차트 --------------------------------------------------------- */
 .list{overflow:hidden}
@@ -134,6 +136,11 @@ th{background:var(--surface);font-family:var(--sans);font-weight:600;font-size:1
 th.sortable.on{color:var(--accent)}
 .memtable tbody tr:nth-child(even){background:transparent}
 .memtable tbody tr:hover{background:var(--surface2)}
+/* 회원 표를 옆으로 넘겨도 닉네임은 왼쪽에 고정 (휴대폰) */
+.memtable th:first-child,.memtable td:first-child{position:sticky;left:0;z-index:1;background:var(--surface);box-shadow:1px 0 0 var(--line)}
+.memtable tbody tr:hover td:first-child{background:var(--surface2)}
+/* 월간 결산 배지 줄: 이름은 한 줄로, 배지는 오른쪽에서 줄바꿈 */
+.mr>b{flex:none;white-space:nowrap}.mr>span{text-align:right;min-width:0}
 tbody tr:last-child td{border-bottom:0}
 .chart{padding:16px 18px}
 .chart h3{font-size:15px;margin-bottom:12px}

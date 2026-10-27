@@ -9,8 +9,9 @@
 (function (ROOT) {
   // ?reset: 예전 서비스 워커(미니게임 폴더를 모르는 버전)를 거치지 않고 열기 — 각 게임 화면이 주소에서 지움
   var GAMES = [
-    { id: 'tichu', href: ROOT + 'tichu/?reset', emoji: '🃏', name: '티츄', desc: '회원끼리 2 대 2 온라인 카드게임 · AI 연습', bg: 'linear-gradient(135deg,#fff4e6,#ffe8cc)', bgDark: 'linear-gradient(135deg,#3a2a12,#4a3315)' },
-    { id: 'roulette', href: ROOT + 'roulette/?reset', emoji: '🎯', name: '순서 룰렛', desc: '구슬을 굴려 순서 · 당첨자 정하기', bg: 'linear-gradient(135deg,#e7f5ff,#dbe4ff)', bgDark: 'linear-gradient(135deg,#142447,#1d2f5e)' },
+    { id: 'tichu', href: ROOT + 'tichu/?reset', emoji: '🃏', name: '티츄', desc: '2 대 2 카드게임 · AI 연습', bg: 'linear-gradient(135deg,#fff4e6,#ffe8cc)', bgDark: 'linear-gradient(135deg,#3a2a12,#4a3315)' },
+    { id: 'roulette', href: ROOT + 'roulette/?reset', emoji: '🎯', name: '순서 룰렛', desc: '구슬로 순서 · 당첨자 정하기', bg: 'linear-gradient(135deg,#e7f5ff,#dbe4ff)', bgDark: 'linear-gradient(135deg,#142447,#1d2f5e)' },
+    { id: 'map', href: ROOT + 'map/?reset', emoji: '📍', name: '장소 지도', desc: '모임 장소 · 맛집 지도', bg: 'linear-gradient(135deg,#e6fcf5,#c3fae8)', bgDark: 'linear-gradient(135deg,#0f2f27,#134235)' },
     // ext: 외부 사이트 — 새 창으로 열고 ↗ 표시. 결과는 앱의 '내 기록 > 방탈출 탱쫄'에서 기록
     { id: 'tangzzol', ext: true, href: 'https://bangpot-tangzzol-test.vercel.app/test/tangzzol', emoji: '🚪', name: '방탈출 탱쫄 판별기', desc: '나는 탱일까 쫄일까? 20종 유형 테스트', bg: 'linear-gradient(135deg,#f3f0ff,#e5dbff)', bgDark: 'linear-gradient(135deg,#2a1f47,#36295e)' }
   ];
@@ -45,12 +46,15 @@
     '.jmb-mini-menu b{display:block;font-size:15px;letter-spacing:-.02em}' +
     '.jmb-mini-menu small{display:block;font-size:12.5px;color:var(--muted,#8b95a1);font-weight:500;margin-top:1px}' +
     '.jmb-mini-btn[aria-expanded="true"]{background:var(--surface2,#f2f4f7)!important}' +
-    '.jmb-mini-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}' +
+    '.jmb-mini-cards{display:grid;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));gap:10px;margin-top:12px}' +
+    '.jmb-mini-cards .tx{min-width:0}' +
+    '.jmb-mini-cards .jmb-tichu-card:not(.jmb-ext-card) .tx small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}' +
+    '@media (max-width:560px){.jmb-mini-cards.c3 .jmb-tichu-card:not(.jmb-ext-card){padding:12px;gap:8px}.jmb-mini-cards.c3 .jmb-tichu-card:not(.jmb-ext-card) .ic{width:38px;height:38px;font-size:20px;border-radius:11px}.jmb-mini-cards.c3 .jmb-tichu-card:not(.jmb-ext-card) .tx b{font-size:14.5px}.jmb-mini-cards.c3 .jmb-tichu-card:not(.jmb-ext-card) .tx small{font-size:12px}.jmb-mini-cards.c3 .jmb-tichu-card .go{right:10px;top:10px}}' +
     '.jmb-mini-cards .jmb-tichu-card{margin:0;flex-direction:column;align-items:flex-start;gap:10px;position:relative}' +
     '.jmb-mini-cards .jmb-tichu-card .go{position:absolute;right:14px;top:14px}' +
     '.jmb-ext{font-size:.8em;opacity:.55;font-weight:600}' +
     '.jmb-mini-cards .jmb-ext-card{grid-column:1/-1;flex-direction:row;align-items:center}' +
-    '@media (max-width:360px){.jmb-mini-cards{grid-template-columns:1fr}.jmb-mini-cards .jmb-tichu-card{flex-direction:row;align-items:center}}' +
+    '@media (max-width:360px){.jmb-mini-cards{grid-template-columns:1fr!important}.jmb-mini-cards .jmb-tichu-card{flex-direction:row;align-items:center}}' +
     '@media (prefers-color-scheme: dark){.jmb-mini-menu{box-shadow:0 12px 32px rgba(0,0,0,.55)}}' +
     '@media (prefers-reduced-motion: reduce){.jmb-mini-menu{animation:none}}';
   function isDark() { return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -174,6 +178,9 @@
     var tiles = view.querySelector('.tiles');
     var box = document.createElement('div');
     box.id = 'jmbMiniCards'; box.className = 'jmb-mini-cards';
+    var n = GAMES.filter(function (g) { return !g.ext; }).length;   // 한 줄에 몇 칸: 혼자 남는 카드가 없게 (3·6개 → 3칸, 그 밖 → 2칸)
+    var cols = n % 3 === 0 ? 3 : n === 1 ? 1 : 2;
+    box.className += ' c' + cols; box.style.setProperty('--cols', cols);
     var dark = isDark();
     box.innerHTML = GAMES.map(function (g) {
       return '<a class="card jmb-tichu-card' + (g.ext ? ' jmb-ext-card' : '') + '" ' + attrs(g) + '><span class="ic" style="background:' + (dark ? g.bgDark : g.bg) + '">' + g.emoji + '</span><span class="tx"><b>' + nm(g) + '</b><small>' + g.desc + '</small></span><span class="go" aria-hidden="true">›</span></a>';
