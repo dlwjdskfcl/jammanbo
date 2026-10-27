@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.10.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.11.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay';
@@ -13,7 +13,7 @@
   var app = document.getElementById('app'), modalEl = document.getElementById('modal'), toastsEl = document.getElementById('toasts');
 
   var S = {
-    token: null, user: null, route: { name: 'boot' }, lobby: null, rank: null, rec: null, notice: '',
+    token: null, user: null, route: { name: 'boot' }, lobby: null, rank: null, rec: null, notice: '', ad: null,
     room: null, roomId: null, roomPw: '', sel: [], exch: [null, null, null], exSlot: 0, exRound: 0,
     lastSeq: 0, seqMatch: '', polling: false, pollSeq: 0, optim: null, backAt: 0, guard: false, lastChat: 0, unread: 0, offset: 0, busy: false, pollT: 0, lobbyT: 0,
     modal: null, resultShown: '', recvShown: '', sound: lsGet(LS_SOUND) !== '0', voice: lsGet(LS_VOICE) !== '0', sv: '', hintI: -1, chatOpen: false, flash: {}
@@ -308,6 +308,7 @@
         return;
       }
       if (j.push) { if (S.roomId === j.push.id && S.route.name === 'room') { netOk(); applyRoom(j.push); } return; }
+      if (j.ad !== undefined) S.ad = j.ad;   // 방 입장 응답의 대회 광고
       var w = RT.wait[j.re];
       if (!w) return;
       delete RT.wait[j.re];
@@ -365,7 +366,7 @@
       if (j.now) S.offset = j.now - Date.now();
       if (j.e) { var e = rtErr(j); if (S.route.name === 'lobby') toast(e.message, true); return; }
       if (!j.lobby) return;
-      S.lobby = j.lobby.rooms; S.notice = j.lobby.notice || '';
+      S.lobby = j.lobby.rooms; S.notice = j.lobby.notice || ''; S.ad = j.lobby.ad || null;
       if (S.route.name === 'lobby' && !S.modal) renderLobby();
       if (LB.manual) { LB.manual = false; toast('새로고침했어요'); }
     };
@@ -505,7 +506,7 @@
   /* ================= 로비 ================= */
   function header() {
     return '<div class="hdr"><div class="title"><span class="logo-mark">T</span>잠만보 티츄</div>' +
-      '<button class="chip" id="meChip">' + (S.user ? lvTag(rankOf(S.user.name)) + ' ' : '') + esc(S.user ? S.user.name : '') + ' ▾</button></div>';
+      '<button class="chip" id="meChip">' + (S.user ? lvTag(rankOf(S.user.name)) + ' ' : '') + esc(S.user ? S.user.name : '') + (S.user && S.user.admin ? ' <span class="adm">운영진</span>' : '') + ' ▾</button></div>';
   }
   function tabbar(on) {
     var t = [['lobby', '#/', '🃏', '방 목록'], ['rank', '#/rank', '🏆', '랭킹'], ['me', '#/me', '📊', '내 전적'], ['rules', '#/rules', '📖', '규칙']];
@@ -525,6 +526,7 @@
     var mc = $('#meChip'); if (mc) mc.onclick = accountMenu;
     var bc = $('#bCreate'); if (bc) bc.onclick = createRoomSheet;
     var bp = $('#bPractice'); if (bp) bp.onclick = function () { practice(bp); };    var br = $('#bRefresh'); if (br) br.onclick = function () { loadLobby(true); };
+    var bad = $('#bAd'); if (bad) bad.onclick = openAdEditor;
     $$('[data-rsort]').forEach(function (b) { b.onclick = function () { S.rankSort = b.getAttribute('data-rsort'); renderLobby(); }; });
     $$('[data-pname]').forEach(function (b) { b.onclick = function () { openProfile(b.getAttribute('data-pname')); }; });
     $$('[data-join]').forEach(function (b) { b.onclick = function () { S.roomPw = ''; joinRoom(b.getAttribute('data-join'), b.getAttribute('data-lock') === '1'); }; });
@@ -532,7 +534,9 @@
   }
   function accountMenu() {
     openModal('<h2>' + esc(S.user.name) + '<button class="x" data-x>✕</button></h2>' +
-      '<div class="small">' + esc(S.user.kind) + ' 계정' + (CFG.env !== 'prod' ? ' · ' + esc(CFG.env) + ' 환경' : '') + '</div>' +
+      '<div class="small">' + (S.user.admin ? '<span class="adm">운영진</span> ' : '') + esc(S.user.admin ? '운영진' : S.user.kind) + ' 계정' + (CFG.env !== 'prod' ? ' · ' + esc(CFG.env) + ' 환경' : '') + '</div>' +
+      (S.user.admin ? '<div class="adm-box"><b>운영진이 할 수 있는 것</b><ul><li>📣 대회 광고 만들기·바꾸기 (방 목록 위)</li><li>어떤 방이든 방 메뉴(≡)에서 ‘운영진: 방 닫기’</li><li>점검 중에도 들어오기</li></ul>' +
+        '<div class="small">잠만보 운영진 계정이면 카카오 로그인 때 자동으로 운영진이 돼요.</div></div>' : '') +
       soundRows() +
       '<div class="menu-list">' +
       '<a class="btn block" href="' + ROOT + '">잠만보 홈으로</a>' +
@@ -559,7 +563,7 @@
   function loadLobby(manual) {
     if (CFG.rt) return rtLobby(manual);
     api('lobby').then(function (r) {
-      S.lobby = r.rooms; S.notice = r.notice || ''; if (r.user) S.user = r.user;
+      S.lobby = r.rooms; S.notice = r.notice || ''; S.ad = r.ad || null; if (r.user) S.user = r.user;
       if (S.route.name === 'lobby' && !S.modal) renderLobby();
       if (manual) toast('새로고침했어요');
     }, function (e) { if (S.route.name === 'lobby') toast(e.message, true); });
@@ -571,6 +575,8 @@
   function lobbyBody() {
     var h = '';
     if (S.notice) h += '<div class="notice">📢 ' + esc(S.notice) + '</div>';
+    h += adHTML('ad-lobby');
+    if (S.user && S.user.admin) h += '<div style="text-align:right;margin:-2px 0 8px"><button class="btn sm ghost" id="bAd">📣 대회 광고 ' + (adNow() ? '바꾸기' : '만들기') + '</button></div>';
     h += '<div class="cta"><button class="btn primary" id="bPractice">🤖 AI와 연습<small>봇 3명과 바로 시작</small></button>' +
       '<button class="btn" id="bCreate">＋ 방 만들기<small>친구들과 2 대 2</small></button></div>';
     h += '<div class="sec-title"><span>열린 방</span><button class="btn sm ghost" id="bRefresh">↻ 새로고침</button></div>';
@@ -822,6 +828,12 @@
     return h;
   }
   function ex(cards, label) { return '<div class="ex"><span class="lbl">' + label + '</span>' + cardsHTML(cards, 'sm') + '</div>'; }
+  // 참새 콜 예시: 테이블(없으면 내가 선) · 내 손 · 판정 · 이유
+  function wx(no, table, hand, must, why) {
+    return '<div class="wx"><div class="wx-h"><b>예' + no + '</b><span class="wx-v ' + (must ? 'must' : 'free') + '">' + (must ? '반드시 내야 해요' : '안 내도 돼요') + '</span></div>' +
+      '<div class="wx-row"><span class="wx-k">테이블</span>' + (table ? cardsHTML(table, 'sm') : '<span class="small">비어 있음 (내가 선)</span>') + '</div>' +
+      '<div class="wx-row"><span class="wx-k">내 손</span>' + cardsHTML(hand, 'sm') + '</div><p class="wx-why">' + why + '</p></div>';
+  }
   function rulesBody() {
     return '<div class="rules">' +
       '<div class="sec-title">티츄 규칙 한눈에</div>' +
@@ -834,15 +846,39 @@
       '<h3>3. 폭탄</h3>' + ex(['J9', 'S9', 'P9', 'T9'], '포카드 폭탄') + ex(['P3', 'P4', 'P5', 'P6', 'P7'], '스트레이트 플러시 폭탄 (같은 문양 5장 이상)') +
       '<ul><li>폭탄은 무엇이든 이기고, <b>내 차례가 아니어도</b> 테이블에 조합이 있으면 끼어들 수 있어요. (손패에서 고르면 ‘폭탄!’ 버튼이 켜져요)</li><li>스트레이트 플러시 &gt; 포카드, 같은 종류면 길거나 높은 쪽이 이겨요.</li></ul>' +
       '<h3>4. 특수 카드</h3>' +
-      '<div class="ex">' + cardHTML('MA', '', 'sm') + '<span><b>참새(1)</b> 가장 낮은 싱글. 낼 때 숫자 하나를 <b>콜</b>할 수 있어요. 그 숫자를 가진 사람은 낼 수 있으면 반드시 내야 해요(폭탄 포함).</span></div>' +
+      '<div class="ex">' + cardHTML('MA', '', 'sm') + '<span><b>참새(1)</b> 가장 낮은 싱글. 낼 때 숫자 하나(2~A)를 <b>콜(소원)</b>할 수 있어요. 자세한 건 아래 <b>6. 참새 콜</b>.</span></div>' +
       '<div class="ex">' + cardHTML('DO', '', 'sm') + '<span><b>개</b> 선일 때만 낼 수 있고, 차례를 파트너에게 넘겨요. 점수 0.</span></div>' +
       '<div class="ex">' + cardHTML('PH', '', 'sm') + '<span><b>봉황</b> 조커처럼 조합을 완성(폭탄 제외)하거나, 싱글로 앞 카드보다 ½ 높게 쓸 수 있어요. 용은 못 이겨요. <b>-25점</b>.</span></div>' +
       '<div class="ex">' + cardHTML('DR', '', 'sm') + '<span><b>용</b> 가장 높은 싱글(폭탄에만 짐). 용으로 딴 트릭은 <b>상대 팀 한 명</b>에게 줘야 해요. <b>25점</b>.</span></div>' +
       '<h3>5. 점수</h3><ul><li>5 = 5점, 10·K = 10점, 용 25점, 봉황 -25점 (한 라운드 총 100점)</li>' +
       '<li>꼴찌의 남은 손패는 상대 팀, 꼴찌가 딴 트릭은 1등에게 가요.</li><li>한 팀이 1·2등으로 나가면(<b>원투</b>) 카드 점수 대신 200점!</li>' +
       '<li>티츄 선언자가 1등으로 나가면 +100(라지 +200), 못 하면 같은 만큼 감점.</li></ul>' +
+      '<h3>6. 참새 콜 (소원)</h3>' +
+      '<div class="wish-sum">콜한 숫자는 <b>낼 수 있으면 반드시</b> 내야 해요.<br>누군가 그 숫자를 낼 때까지 계속 남아 있어요 (트릭이 바뀌어도).</div>' +
+      '<p><b>내 차례에 이렇게 확인해요</b></p><ol class="wish-steps">' +
+      '<li>콜한 숫자 카드가 <b>내 손에 있나요?</b> 없으면 자유예요. (봉황은 그 숫자로 치지 않아요)</li>' +
+      '<li>지금 테이블과 <b>같은 조합</b>으로, 그 숫자를 넣어 낼 수 있나요? <b>봉황을 섞어도 돼요.</b> → 있으면 <b>반드시</b> 내요.</li>' +
+      '<li>안 되면, 그 숫자가 들어간 <b>폭탄</b>으로 테이블을 이길 수 있나요? → 있으면 폭탄이라도 <b>반드시</b> 내요.</li>' +
+      '<li>셋 다 아니면 → <b>패스</b>해도 돼요.</li></ol>' +
+      '<p class="small">내가 선(테이블이 빈 상태)이면 그 숫자가 들어간 조합으로 시작해야 해요. 게임 화면 위에 <b>🐦 꼭 내야 해요</b>가 뜨면 지금 의무가 있는 거예요.</p>' +
+      '<p><b>예시</b> <span class="small">— 모두 <b>9 콜</b>일 때</span></p>' +
+      wx(1, ['P7'], ['T9', 'J3', 'S12'], true, '9 로 7 을 이길 수 있어요. Q 로 넘기거나 패스하면 안 돼요.') +
+      wx(2, ['P11'], ['T9', 'J3', 'S12'], false, '9 로는 J 를 못 이기고 9 가 든 폭탄도 없어요. Q 를 내도 되고 패스해도 돼요.') +
+      wx(3, ['P11'], ['J9', 'S9', 'P9', 'T9', 'J3'], true, '싱글 9 로는 못 이기지만 <b>9 포카드 폭탄</b>으로 이길 수 있어요 → 폭탄을 내야 해요.') +
+      wx(4, ['S11'], ['P7', 'P8', 'P9', 'P10', 'P11', 'J3'], true, '같은 문양 7·8·9·10·J 는 9 가 든 <b>스트레이트 플러시 폭탄</b>이에요 → 내야 해요.') +
+      wx(5, ['J3', 'S4', 'P5', 'T6', 'J7'], ['J6', 'S7', 'P8', 'T9', 'J11', 'S12', 'P13', 'PH'], true, '10 이 없지만 <b>봉황을 10 으로</b> 쓰면 7·8·9·봉황·J 로 이길 수 있어요 → 내야 해요.') +
+      wx(6, ['J3', 'S4', 'P5', 'T6', 'J7'], ['J6', 'S7', 'P8', 'T10', 'J11', 'S12', 'P13', 'PH'], false, '손에 <b>9 가 없어요.</b> 봉황으로 9 자리를 채울 수는 있지만 봉황은 9 로 치지 않아요.') +
+      wx(7, ['J3', 'S4', 'P5', 'T6', 'J7'], ['T9', 'S12', 'P13', 'J14', 'PH', 'J2'], false, '9 는 있지만 10 과 J 가 둘 다 비어서 봉황 한 장으로는 스트레이트를 못 이어요.') +
+      wx(8, null, ['T9', 'J9', 'J3', 'S12'], true, '내가 선이에요. 9 가 들어간 조합으로 시작해야 해요 (싱글 9 도, 9 페어도 OK).') +
       '<h3>잠만보 티츄에서는</h3><ul><li>턴 시간을 넘기면 자동으로 진행돼요(낼 의무가 없으면 패스). ‘돌아왔어요’를 누르면 다시 직접 해요.</li>' +
       '<li>게임 중 나가면 봇이 대신하고, 그 판은 전적에 들어가지 않아요.</li><li>레이팅은 사람 4명이 끝까지 한 게임만 반영돼요.</li><li>라운드 중에는 각자 따간 점수가 보이지 않아요. 라운드가 끝나면 결과에서 확인해요.</li><li>판을 끝낼 때마다 경험치가 쌓여 레벨·칭호가 오르고, 조건을 채우면 배지를 받아요 (내 전적 탭).</li></ul>' +
+      '<h3>🔎 참새 콜 — 특수 상황</h3><p class="small" style="margin-top:0">자주 나오진 않지만 헷갈리는 경우예요.</p><ul class="wish-special">' +
+      '<li><b>차례가 아닐 때 폭탄:</b> 폭탄은 차례가 아니어도 낼 수 있으니, 콜 숫자가 든 폭탄을 먼저 내서 소원을 들어줘도 돼요. 단 ‘반드시’는 <b>내 차례에만</b> 확인해요 — 차례가 아닐 때 안 내도 반칙이 아니에요.</li>' +
+      '<li><b>더 센 폭탄이 이미 나왔을 때:</b> 5 콜인데 테이블에 7 포카드가 있으면, 내 5 포카드로는 못 이기니 패스해도 돼요.' + cardsHTML(['J7', 'S7', 'P7', 'T7'], 'sm') + '</li>' +
+      '<li><b>선인데 콜 숫자가 있으면 개를 낼 수 없어요.</b> 콜 숫자가 들어간 조합으로 시작해야 하니까요.</li>' +
+      '<li><b>봉황 싱글로 대신할 수 없어요.</b> 9 콜인데 9 를 낼 수 있으면 9 대신 봉황을 내면 안 돼요.</li>' +
+      '<li><b>콜이 끝나는 때:</b> 누구든(콜한 사람·같은 팀 포함) 그 숫자를 내면 끝나요. 라운드가 끝나도 사라져요.</li>' +
+      '<li><b>콜은 안 해도 돼요.</b> 참새를 낼 때 ‘콜 안 함’을 고를 수 있어요. 콜할 수 있는 건 2~A 예요 (용·봉황·개는 안 돼요).</li></ul>' +
       '</div>';
   }
 
@@ -1094,7 +1130,7 @@
         '<button class="btn block" id="wShuffle" ' + (r.seats.filter(Boolean).length < 2 ? 'disabled' : '') + '>🎲 랜덤 팀</button><button class="btn block" id="wOpt">방 설정</button></div>'
         : me >= 0 ? '<div class="empty" style="padding:14px">방장(' + esc(r.hostName) + ')이 시작하기를 기다리는 중…</div>' : '<div class="empty" style="padding:14px">관전 중이에요. 빈자리를 눌러 앉을 수 있어요.</div>') +
       '<div style="display:flex;gap:8px"><button class="btn block" id="wInvite">🔗 초대 링크 복사</button>' + (me >= 0 ? '<button class="btn danger block" id="wLeave">나가기</button>' : '') + '</div>' +
-      '<div class="sec-title">채팅</div><div class="chatlist" id="wChatList">' + chatItems(r.chat.slice(-8)) + '</div>' +
+      '<div class="sec-title">채팅</div>' + adHTML('ad-chat') + '<div class="chatlist" id="wChatList">' + chatItems(r.chat.slice(-8)) + '</div>' +
       '<form class="chatform" id="wChatForm"><input class="input" id="wMsg" maxlength="100" placeholder="메시지" autocomplete="off"><button class="btn" type="submit">보내기</button></form>' +
       '</div></div>';
     var focused = document.activeElement && document.activeElement.id === 'wMsg', val = focused ? $('#wMsg').value : '';
@@ -1204,10 +1240,41 @@
       return '<div class="m' + (c.pending ? ' pending' : '') + '"><b class="' + cls + '">' + esc(c.n) + '</b>' + esc(c.m) + '</div>';
     }).join('') || '<div class="m sys">아직 메시지가 없어요</div>';
   }
+  /* ----- 대회 광고 (티츄 설정 '광고' · '광고링크' · '광고마감' — 운영진이 로비의 📣 버튼으로 바꿈) ----- */
+  function kstToday() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
+  function adNow() { var a = S.ad; return a && a.t && !(a.until && a.until < kstToday()) ? a : null; }   // 마감 지나면 바로 숨김 (서버 반영 전에도)
+  function adHTML(cls) {
+    var a = adNow(); if (!a) return '';
+    var body = '<span class="ad-ic" aria-hidden="true">📣</span><span class="ad-t">' + esc(a.t) + '</span>' + (a.url ? '<span class="ad-go">자세히 ›</span>' : '');
+    return /^https:\/\//.test(a.url || '') ? '<a class="ad ' + cls + '" href="' + esc(a.url) + '" target="_blank" rel="noopener noreferrer">' + body + '</a>'
+      : '<div class="ad ' + cls + '">' + body + '</div>';
+  }
+  function openAdEditor() {
+    var a = S.ad || {};
+    openModal('<h2>📣 대회 광고<button class="x" data-x>✕</button></h2>' +
+      '<p class="small" style="margin-top:0">로비 · 채팅창 맨 위 · 라운드 결과에 보여요. 다른 사람 화면에는 <b>최대 5분 뒤</b>에 바뀌어요.</p>' +
+      '<label class="small" for="adT">문구 (80자까지)</label><input class="input" id="adT" maxlength="80" placeholder="예) 🏆 11/15(토) 잠만보 티츄 대회! 참가 신청 받아요" value="' + esc(a.t || '') + '">' +
+      '<label class="small" for="adU" style="display:block;margin-top:10px">링크 (선택 · https:// 로 시작)</label><input class="input" id="adU" maxlength="300" inputmode="url" placeholder="https://open.kakao.com/…" value="' + esc(a.url || '') + '">' +
+      '<label class="small" for="adD" style="display:block;margin-top:10px">마감일 (선택 · 지나면 저절로 숨겨져요)</label><input class="input" id="adD" type="date" value="' + esc(a.until || '') + '">' +
+      '<div class="small" style="margin-top:12px">미리보기</div><div id="adPrev"></div><div class="err" id="adErr"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px">' + (a.t ? '<button class="btn danger block" id="adOff">광고 끄기</button>' : '') + '<button class="btn primary block" id="adSave">저장</button></div>');
+    var val = function () { return { t: $('#adT').value.trim(), url: $('#adU').value.trim(), until: $('#adD').value }; };
+    var prev = function () { var v = val(), keep = S.ad; S.ad = v.t ? v : null; $('#adPrev').innerHTML = adHTML('ad-lobby') || '<div class="small" style="opacity:.7">(문구가 없거나 마감일이 지났어요)</div>'; S.ad = keep; };
+    ['#adT', '#adU', '#adD'].forEach(function (id) { $(id).oninput = prev; });
+    prev();
+    var save = function (v, btn) {
+      if (v.url && !/^https:\/\//.test(v.url)) { $('#adErr').textContent = '링크는 https:// 로 시작해야 해요'; return; }
+      btn.disabled = true;
+      api('setAd', v).then(function (r) { S.ad = r.ad || null; closeModal(); toast(v.t ? '광고를 저장했어요 (다른 사람에게는 최대 5분 뒤)' : '광고를 껐어요'); if (S.route.name === 'lobby') renderLobby(); },
+        function (e) { btn.disabled = false; var er = $('#adErr'); if (er) er.textContent = e.message; else toast(e.message, true); });   // 그 사이 창을 닫았으면 알림으로
+    };
+    $('#adSave').onclick = function () { save(val(), this); };
+    var off = $('#adOff'); if (off) off.onclick = function () { if (confirm('광고를 끌까요?')) save({ t: '', url: '', until: '' }, off); };
+  }
   var QUICK = ['좋아요 👍', '나이스! 👏', '미안해요 🙏', 'ㅋㅋㅋ', '티츄 화이팅!', '폭탄 조심 💣', '잠깐만요', '한 판 더?'];
   function openChat() {
     S.chatOpen = true; S.unread = 0;
-    openModal('<h2>채팅<button class="x" data-x>✕</button></h2><div class="chatlist" id="cl"></div>' +
+    openModal('<h2>채팅<button class="x" data-x>✕</button></h2>' + adHTML('ad-chat') + '<div class="chatlist" id="cl"></div>' +
       '<div class="quick">' + QUICK.map(function (q) { return '<button data-q="' + esc(q) + '">' + esc(q) + '</button>'; }).join('') + '</div>' +
       '<form class="chatform" id="cf"><input class="input" id="cm" maxlength="100" placeholder="메시지" autocomplete="off"><button class="btn primary" type="submit">보내기</button></form>',
       function () { S.chatOpen = false; render(); });
@@ -1694,6 +1761,7 @@
       html += '<div class="big-win"><div class="t" style="color:' + (r.me < 0 ? 'var(--gold2)' : won ? '#86efac' : '#fda4af') + '">' + (r.me < 0 ? (g.winner === 0 ? 'A팀 승리' : 'B팀 승리') : won ? '🎉 우리 팀 승리!' : '아쉽게 졌어요') + '</div>' +
         '<div class="s"><span class="' + (us ? 'tB' : 'tA') + '">' + g.scores[us] + '</span> : <span class="' + (us ? 'tA' : 'tB') + '">' + g.scores[them] + '</span></div><div class="small">' + g.round + '라운드 · 목표 ' + g.target + '점</div></div>';
     }
+    html += adHTML('ad-result');
     if (h.dbl) html += '<div class="notice" style="text-align:center">🎊 원투! ' + esc(seatName(h.out[0])) + ' · ' + esc(seatName(h.out[1])) + ' 팀 +200</div>';
     html += '<div class="order">' + order.map(function (s, i) {
       var call = h.calls.filter(function (c) { return c.s === s; })[0];
@@ -1772,9 +1840,18 @@
     if (!window.TE) { app.innerHTML = '<div class="boot">엔진 파일(engine.js)을 불러오지 못했어요</div>'; return; }
     kakaoInAppNotice();
     var t = lsGet(LS_TOKEN), info = t && tokenInfo(t);
-    if (info && info.x > Date.now()) { S.token = t; S.user = { uid: info.u, name: info.n, kind: info.k, admin: info.k === '운영진' }; return route(); }
-    lsSet(LS_TOKEN, null);
     var ks = kakaoSession();
+    if (info && info.x > Date.now()) {
+      S.token = t; S.user = { uid: info.u, name: info.n, kind: info.k, admin: info.k === '운영진' };
+      var syncKey = 'tichu_admsync' + ENV_SFX, mainAdm = !!(ks && ks.user && ks.user.admin);
+      // 잠만보에서 운영진이 됐거나 빠졌는데 티츄 토큰은 예전 것 → 카카오로 한 번 다시 받음 (안 맞아도 이 탭에서 한 번만)
+      if (ks && /^k:/.test(info.u) && mainAdm !== S.user.admin && !sessionStorage.getItem(syncKey)) {
+        try { sessionStorage.setItem(syncKey, '1'); } catch (e) {}
+        return api('loginKakao', { token: ks.token }).then(function (r) { setLogin(r); if (r.user.admin) toast('운영진으로 들어왔어요'); route(); }, function () { route(); });
+      }
+      return route();
+    }
+    lsSet(LS_TOKEN, null);
     if (ks && ks.user && ks.user.nickname && lsGet(LS_NOAUTO) !== '1') { renderLogin(); var kg = $('#kGo'); return loginKakao(kg); }
     renderLogin();
   }
