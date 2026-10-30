@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow, noai, noimageai">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>잠만보 방탈출</title>
+<!-- 방탈출 미니게임은 없앰 → 잠만보 게임 탭으로. 예전 공유 링크 escape/#/t/<테마ID> 는 games#esc/<테마ID> (그 테마 창) -->
+<script>
+(function () {
+  var m = /^#\/t\/(.+)$/.exec(location.hash);
+  location.replace('../games#esc' + (m ? '/' + m[1] : ''));
+})();
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=../games"></noscript>
+</head>
+<body style="font-family:sans-serif;padding:24px">방탈출은 <a href="../games">잠만보 게임 탭</a>으로 옮겼어요.</body>
+</html>
