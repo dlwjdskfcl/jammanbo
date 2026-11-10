@@ -6,7 +6,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.6.1';
+  var VER = '1.6.4';
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
   var ENV_SFX = ENV !== 'prod' ? '_' + ENV : '';
@@ -184,7 +184,7 @@
     if (!w || !S.idx) return;
     var typed = w;
     if (!S.idx.has(w)) {   // (1.6.0) 사전에 없으면 기본형 · 조사를 뺀 말로 한 번 더 찾음 ('먹었다' → '먹다', '학교에서' → '학교')
-      var alt = lemmas(w).filter(function (x) { return S.idx.has(x); })[0];
+      var alt = findForm(w, function (x) { return S.idx.has(x); });
       if (!alt) { toast('‘' + w + '’ 은(는) 사전에 없는 단어예요', true); if (inp) { inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.select(); } hap('warn'); return; }
       w = alt;
     }
@@ -201,12 +201,13 @@
   function lemmas(w) {
     var out = [], add = function (x) { if (x && x !== w && out.indexOf(x) < 0) out.push(x); }, i, e, st;
     // 기본형('웃다' · '사랑하다')이 사전에 없을 때: 사전에는 쓰이는 꼴('웃는' · '사랑한다')로 들어 있는 경우가 많아 그쪽으로 찾음
-    if (w.length > 2 && w.slice(-2) === '하다') { st = w.slice(0, -2); ['한다', '하는', '했다', '하고', '하게', '하기', '한', '할', '함', '해'].forEach(function (x) { add(st + x); }); add(st); }
+    if (w.length > 2 && w.slice(-2) === '하다') { st = w.slice(0, -2); add(st); ['한다', '하는', '했다', '하고', '하게', '하기', '한', '할', '함', '해'].forEach(function (x) { add(st + x); }); }   // 어근('공부' · '사랑')이 뜻이 가장 가까워 먼저
     else if (w.length > 1 && w.slice(-1) === '다') {
       st = w.slice(0, -1);
       var lc = st.charAt(st.length - 1), lj = jong(lc);
       if (lj === 0) { var base = lc.charCodeAt(0); add(st.slice(0, -1) + String.fromCharCode(base + 4) + '다'); add(st.slice(0, -1) + String.fromCharCode(base + 4)); }   // 가다 → 간다 · 예쁘다 → 예쁜
-      ['는다', '는', '은', '고', '었다', '았다', '어', '아', '기', '음', '게', '지', '을'].forEach(function (x) { add(st + x); });
+      if (lj === 8) { var nj = st.slice(0, -1) + noJong(lc); add(nj + '는'); add(nj + '는다'); add(st.slice(0, -1) + String.fromCharCode(noJong(lc).charCodeAt(0) + 4) + '다'); }   // 팔다 → 파는 · 판다 (ㄹ 탈락)
+      ['는다', '는', '고', '었다', '았다', '어', '아', '기', '음', '게', '지'].forEach(function (x) { add(st + x); });
     }
     for (i = 0; i < H_END.length; i++) { e = H_END[i]; if (w.length > e.length && w.slice(-e.length) === e) { st = w.slice(0, -e.length); add(st + '하다'); add(st); } }
     var ends = V_END.map(function (x) { return [x, 1]; }).concat(N_END.map(function (x) { return [x, 0]; })).sort(function (a, b) { return b[0].length - a[0].length || b[1] - a[1]; });
@@ -220,6 +221,12 @@
     if (!tail && (j === 4 || j === 8 || j === 16)) add(w.slice(0, -1) + noJong(last) + '다');
     add(w + '다'); add(w + '하다');
     return out;
+  }
+  function findForm(w, has) {   // 사전에 있는 가까운 꼴 — 한 단계로 안 되면 한 번 더 ('웃었다' → '웃다' → '웃는다')
+    var l1 = lemmas(w), i, j, l2;
+    for (i = 0; i < l1.length; i++) if (has(l1[i])) return l1[i];
+    for (i = 0; i < l1.length; i++) { l2 = lemmas(l1[i]); for (j = 0; j < l2.length; j++) if (has(l2[j])) return l2[j]; }
+    return '';
   }
   function addGuess(w, isHint) {
     if (recordable() && !S.L.nonce) ensureStart();
@@ -486,12 +493,10 @@
     return list.slice(0, max).map(function (p) { return '<span class="pc" data-pnick="' + esc(p.nick) + '">' + esc(p.nick) + (p.streak > 1 ? ' 🔥' + p.streak : '') + '</span>'; }).join('') + (list.length > max ? '<span class="pc more">외 ' + (list.length - max) + '명</span>' : '');
   }
   function nudge() {   // 오늘 문제 머리 카드: 최근 7일 안에 한 사람 중 오늘 아직 안 한 사람
-    var p = pendingList(S.srv.pending);
-    if (!p.length) return '';
-    return '<div class="nudge">⏳ <b>아직 안 푼 사람</b><div class="pcs">' + pendingChips(p, 6) + '</div></div>';
+    return '';   // (1.6.4) '아직 안 푼 사람' 이름은 보여 주지 않음
   }
   function pendingCard(R) {
-    var p = pendingList(R.pending);
+    return ''; var p = pendingList(R.pending);   // (1.6.4) 이름은 보여 주지 않음
     return p.length ? '<div class="card"><h3>⏳ 오늘 아직 안 푼 사람 <small>최근 7일 참여자</small></h3><div class="pcs">' + pendingChips(p, 15) + '</div><div class="hint">이름을 누르면 기록을 볼 수 있어요. 연속 기록이 끊기기 전에 콕 찔러 주세요 😄</div></div>' : '';
   }
   function cmpRow(label, a, b, lowerBetter) {
@@ -550,7 +555,7 @@
     var title = tab === 'today' ? '오늘의 정답자 <small>' + R.day + ' · 점수 순</small>' : tab === 'week' ? '이번 주 포인트 <small>' + R.week + '(월)~</small>' : tab === 'season' ? '시즌 포인트 <small>' + R.season + '</small>' : tab === 'rate' ? '레이팅 <small>' + R.season + ' · 3일 이상 참여</small>' : '연속 정답 <small>지금 이어가는 중</small>';
     h += '<div class="seg sm" id="rkTabs">' + tabs.map(function (t) { return '<button type="button" data-t="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div>' +
       '<div class="card"><h3>' + title + '</h3>' + rkRows(list, tab === 'week' || tab === 'season' ? 'pts' : tab) +
-      (tab === 'today' ? '<div class="hint">오늘 ' + R.solvedToday + '명 정답 · 참여 회원 ' + R.people + '명</div>' : '') +
+      (tab === 'today' ? '<div class="hint">오늘 ' + R.solvedToday + '명 정답 · 참여 회원 ' + (typeof R.total === 'number' ? R.total : typeof R.people === 'number' ? R.people : Object.keys(R.people || {}).length) + '명</div>' : '') +
       (tab === 'rate' ? '<div class="hint">그 날 푼 사람끼리 추측 횟수를 겨루는 점수 (처음 1500점). 오늘 결과는 잠정이라 사람이 더 풀면 조금 바뀌어요.</div>' : '') + '</div>' + pendingCard(R) +
       '<p class="hint">순위는 1분마다 갱신돼요. 시즌은 분기(1 · 4 · 7 · 10월)마다 새로 시작해요.</p>';
     $('view').innerHTML = h;
