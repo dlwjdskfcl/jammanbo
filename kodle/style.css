@@ -1,0 +1,53 @@
+/* 꼬들 — 꼬맨틀(../semantle/style.css)의 머리줄 · 탭 · 카드 · 버튼을 그대로 쓰고, 칸 · 키보드만 더함 */
+:root{--tile-n:#8b95a1;--tile-line:#d5d9e0}
+@media (prefers-color-scheme: dark){:root{--tile-n:#3a404b;--tile-line:#323843}}
+.kd h3 .tag{font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 9px;font-size:12px}
+#board{display:grid;gap:6px;margin:10px auto 8px;max-width:340px}
+.krow{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.krow .c{aspect-ratio:1;border:2px solid var(--tile-line);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:clamp(20px,6.5vw,28px);font-weight:800;background:var(--surface);user-select:none}
+.krow .c.f{border-color:var(--ink2)}
+.krow .c.g{background:var(--ok);border-color:var(--ok);color:#fff}.krow .c.y{background:var(--gold);border-color:var(--gold);color:#fff}.krow .c.n{background:var(--tile-n);border-color:var(--tile-n);color:#fff}
+.krow .c.pop{animation:kpop .25s}.krow.shake{animation:ksh .3s}
+@keyframes kpop{50%{transform:scale(1.08)}}@keyframes ksh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.kmsg{min-height:20px;text-align:center;color:var(--muted);font-size:13.5px;margin:2px 0 6px}.kmsg.bad{color:var(--bad)}
+.keys{display:grid;gap:6px;margin:8px auto 4px;max-width:420px}
+.kr{display:flex;gap:5px;justify-content:center}
+.kr button{flex:1;max-width:40px;min-width:0;padding:11px 0;border-radius:9px;border:0;background:var(--surface2);color:var(--ink);font-weight:700;font-size:15px}
+.kr button.w{flex:1.7;max-width:68px;font-size:13px}.kr button.pri{background:var(--accent);color:var(--accent-ink)}
+.kr button.g{background:var(--ok);color:#fff}.kr button.y{background:var(--gold);color:#fff}.kr button.n{background:var(--tile-n);color:#fff;opacity:.6}
+.kres{text-align:center}.kres .em{font-size:34px}.kres h2{margin:4px 0}.kres .ans{font-size:15px}.kres pre{margin:8px 0;font:inherit;line-height:1.3;letter-spacing:1px}
+.dist{display:grid;gap:3px;margin-top:8px}.dist div{display:flex;gap:6px;align-items:center;font-size:12.5px}.dist i{display:block;background:var(--accent);color:var(--accent-ink);border-radius:4px;padding:0 6px;min-width:18px;font-style:normal}
+.stats4{display:flex;justify-content:space-around;text-align:center}.stats4 b{display:block;font-size:22px}.stats4 span{font-size:12px;color:var(--muted)}
+details.hc{border-top:1px solid var(--line);padding:8px 0}details.hc summary{cursor:pointer;display:flex;gap:8px;align-items:center;font-weight:700}details.hc summary small{color:var(--muted);font-weight:500;margin-left:auto}
+details.hc pre{margin:6px 0 0;font:inherit;line-height:1.25}
+
+.kdtabs{margin:0 0 10px!important}.kdtabs button{font-size:13px}
+
+/* 한 화면 맞춤 (1.6.0): 칸 · 키 크기는 app.js fit() 이 --kt · --kk 로 정함 */
+.kd{--kt:44px;--kk:38px;padding:10px 12px 12px}
+.kd .kh{display:flex;align-items:center;justify-content:space-between;margin:0 2px 4px}.kd .kh b{font-size:15px}.kd .kh small{font-weight:700;color:var(--muted)}
+.kd .kh .tag{font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 9px;font-size:12px;margin-left:4px}
+.kd #board{width:calc(var(--kt)*6 + 25px);max-width:100%;margin:4px auto 4px;gap:5px}
+.kd .krow{grid-template-columns:repeat(6,var(--kt));gap:5px;justify-content:center}
+.kd .krow .c{width:var(--kt);height:var(--kt);aspect-ratio:auto;font-size:calc(var(--kt)*.5);border-radius:calc(var(--kt)*.2)}
+.kd .kmsg{min-height:18px;margin:0 0 4px;font-size:13px}
+.kd .keys{gap:5px;margin:2px auto 0;max-width:460px}
+.kd .kr{gap:4px}
+.kd .kr button{height:var(--kk);padding:0;font-size:calc(var(--kk)*.45);border-radius:8px;max-width:none}
+.kd .kr button.w{flex:1.5;font-size:calc(var(--kk)*.36)}
+.kres{text-align:center}.kres .khead{display:flex;gap:8px;align-items:center;justify-content:center}.kres .khead .em{font-size:26px}.kres .khead b{font-size:18px}
+.kres .ans{margin:2px 0;font-size:14px}.kres .pts{font-size:22px;margin:2px 0}.kres .btns{margin-top:8px;gap:6px}.kres .btns .btn{padding:9px 12px;font-size:13.5px;flex:1 1 90px}
+.kres .parts{margin:2px 0}.kres .hint{margin:4px 0 0}
+.kemb .kres pre{display:none}
+
+/* 넓은 화면(PC): 칸은 왼쪽, 키보드 · 결과는 오른쪽에 나란히 */
+.kd.kwide{display:grid;grid-template-columns:auto auto;justify-content:center;grid-template-areas:'kh kh' 'bd side' 'ms side';column-gap:28px;align-content:start}
+.kd.kwide .kh{grid-area:kh}.kd.kwide #board{grid-area:bd;margin:4px 0}.kd.kwide .kmsg{grid-area:ms;text-align:left}
+.kd.kwide .keys,.kd.kwide .kres{grid-area:side;align-self:center;max-width:560px;width:100%;justify-self:center}
+.kd.kwide .kr{gap:6px}
+
+/* 1.7.0: 키 4줄 — 자음(쌍자음 포함) · 모음이 전부 보임. 자음 · 모음 색을 살짝 달리 */
+.kd .kr button.vw{background:var(--accent-soft);color:var(--accent)}
+.kd .kr button.cn{background:var(--surface2)}
+.kd .kr button.g{background:var(--ok);color:#fff}.kd .kr button.y{background:var(--gold);color:#fff}.kd .kr button.n{background:var(--tile-n);color:#fff;opacity:.6}
+.kd .kr button.w{background:var(--surface2);color:var(--ink)}.kd .kr button.w.pri{background:var(--accent);color:var(--accent-ink)}

@@ -6,15 +6,18 @@
  */
 (function () {
   'use strict';
-  var VER = '1.14.3';
+  var VER = '1.17.0';
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
+  function kstDay() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
+  var KODLE_FROM = '2026-11-12';   // 꼬들 공개일(KST) — 운영은 이 날부터 탭이 켜짐 (미리 올려 두면 자정에 자동으로 열림). 테스트 사이트는 늘 켜짐
+  var KODLE_ON = /jammanbo-beta/.test(location.pathname) || ENV !== 'prod' || kstDay() >= KODLE_FROM;
   var ENV_SFX = ENV !== 'prod' ? '_' + ENV : '';
   var API = window.SEM_API_LOCAL || CFG.api || '';
   var EDGE = window.SEM_EDGE_LOCAL || CFG.semEdge || '';   // (1.13.0) 엣지(Cloudflare Worker): 표를 Apps Script 없이 0.1초대로 줌. 비어 있거나 실패하면 Apps Script 경로
   var ROOT = (function () { var seg = location.pathname.split('/')[1] || ''; return /\.github\.io$/.test(location.hostname) && seg ? '/' + seg + '/' : '/'; })();
   var LS = { auth: 'jmb_kakao_v2' + ENV_SFX, state: 'jmb_kakao_state' + ENV_SFX, play: 'jmb_sem_play' + ENV_SFX, pend: 'jmb_sem_pend' + ENV_SFX, help: 'jmb_sem_help', tab: 'jmb_sem_tab', sort: 'jmb_sem_sort', xl: 'jmb_sem_xl', rkc: 'jmb_sem_rkc' + ENV_SFX, hsc: 'jmb_sem_hsc' + ENV_SFX };   // rkc · hsc: 순위 · 내 기록을 기기에 저장해 두었다가 먼저 보여 줌 (1.14.0)
-  var HINT_COST = 15, TOPN = 1000, HINT_EVERY = 5;   // HINT_EVERY: 추측 5번마다 힌트가 하나씩 생김, 개수 제한 없음 (서버 SEM_CFG_.HINT_EVERY 와 같게)
+  var BASE_PTS = 200, HINT_COST = 40, TOPN = 1000, HINT_EVERY = 5;   // 점수 상수 (서버 SEM_CFG_ BASE · HINT_COST 와 같게 — 1.16.1 에서 150 · 15 → 200 · 40)   // HINT_EVERY: 추측 5번마다 힌트가 하나씩 생김, 개수 제한 없음 (서버 SEM_CFG_.HINT_EVERY 와 같게)
   var BADGES = [   // 서버 Semantle.js badgesOf 와 같은 id
     { id: 'first', e: '🥇', n: '선두 주자', d: '그 날 가장 먼저 정답' },
     { id: 'fast', e: '⚡', n: '번개', d: '10번 안에 정답' },
@@ -32,7 +35,8 @@
             sort: lsGet(LS.sort) === 'order' ? 'order' : 'sim', scrollNew: false, scrollRes: false, sharing: false, focused: false,
             // (1.7.0) 연습 탭: 오늘 판과 연습 판의 문제 · 추측 상태를 갈아끼움 (ctx = 지금 S 에 들어 있는 쪽, hold = 안 쓰는 쪽 보관)
             ctx: 'td', hold: { td: null, pz: null }, pDone: [], pK: null,
-            xl: lsGet(LS.xl) !== '0', sel: null, xAddr: '', queue: [], loading: false, optimistic: false };   // (1.8.0) 엑셀 모드 — 기본 켜짐, 헤더 버튼(xlBtn)으로 끔 (기기에 저장)
+            xl: lsGet(LS.xl) !== '0', sel: null, xAddr: '', queue: [], loading: false, optimistic: false };
+  S.kSub = { prac: 'sem', hist: 'sem' };   // (1.16.0) 연습 · 내 기록 탭 안에서 보는 게임: 'sem' 꼬맨틀 · 'kodle' 꼬들   // (1.8.0) 엑셀 모드 — 기본 켜짐, 헤더 버튼(xlBtn)으로 끔 (기기에 저장)
   var CTX_KEYS = ['srv', 'L', 'sims', 'ans', 'rankOf', 'top', 'scale', 'lastW', 'fb'];
   function snap() { var o = {}; CTX_KEYS.forEach(function (k) { o[k] = S[k]; }); return o; }
   function load(o) { CTX_KEYS.forEach(function (k) { S[k] = o[k]; }); }
@@ -70,7 +74,7 @@
     var xb = $('xlBtn'); if (xb) xb.setAttribute('aria-pressed', S.xl ? 'true' : 'false');
     xlChrome();
   }
-  function xlTitle() { return '업무현황' + (S.view === 'prac' ? '_연습' : S.view === 'rank' ? '_순위' : S.view === 'hist' ? '_이력' : S.srv && S.srv.no ? '_' + S.srv.no : '') + '.xlsx'; }
+  function xlTitle() { return '업무현황' + (S.view === 'kodle' ? '_꼬들' : S.view === 'prac' ? (S.kSub.prac === 'kodle' && KODLE_ON ? '_꼬들연습' : '_연습') : S.view === 'rank' ? '_순위' : S.view === 'hist' ? '_이력' : S.srv && S.srv.no ? '_' + S.srv.no : '') + '.xlsx'; }
 
   /* ---------- 엑셀 모드 껍데기 (1.10.0): 로고 · 리본 · 이름 상자 + 수식 입력줄 · 상태 표시줄. 켤 때 만들고 끌 때 지움.
    * 입력창(#gw)과 추측 폼(#gf)은 수식 입력줄 안에 한 번만 있음 (켜진 동안). 리본의 '편집' 그룹 버튼이 힌트 · 포기 · 새 문제 · 정렬을 맡음 ---------- */
@@ -110,6 +114,7 @@
   function xlState() {
     if (!S.xl || !$('xlRibbon')) return;
     var game = (S.view === 'play' || (S.view === 'prac' && hasPrac())) && S.srv && S.srv.ready && S.L, L = game ? S.L : null;
+    if (kodleSub()) { game = false; L = null; }   // 꼬들 화면(탭 · 연습 · 기록 안의 꼬들)에서는 꼬맨틀 입력 · 리본 버튼을 흐리게
     var gw = $('gw'), open = !!L || S.loading; if (gw) { gw.disabled = !open; if (!open) gw.value = ''; }   // 불러오는 중에도 입력 가능 (대기열)
     $('xOk').disabled = !open;
     var hb = $('rbHint'), hi = L ? hintInfo() : { off: true };
@@ -538,7 +543,7 @@
       '<p>매일 하나의 <b>비밀 단어</b>가 정해져요. 아무 단어나 입력하면 비밀 단어와 <b>뜻이 얼마나 가까운지</b>(유사도)를 알려 줘요. 철자가 아니라 <b>쓰임새·의미</b>가 비슷해야 점수가 높아요.</p>' +
       '<ul><li>유사도는 -100 ~ 100. 높을수록 가까워요.</li><li><b>1000위 안</b>에 들면 순위가 보여요. (1위 = 비밀 단어와 가장 가까운 단어)</li><li>같은 문맥에 같이 나올 법한 단어를 떠올려 보세요. 반대말도 의외로 가까울 수 있어요. ‘사랑’과 ‘증오’는 뜻은 반대지만 같은 문맥에 자주 나와서 비슷해요. ‘밤’처럼 뜻이 여럿인 단어(어두운 밤 · 먹는 밤)는 어느 쪽인지도 생각해 보세요.</li><li>정답을 맞힌 뒤에도 추측을 계속할 수 있어요. 맞힌 뒤에 보이는 <b>가까운 단어 1000개</b>를 살펴보면 유사도를 이해하는 데 도움이 돼요. 정답은 한국 시간 자정에 바뀌고, 어제 정답과 가까운 단어도 볼 수 있어요.</li><li>비밀 단어는 명사 · 동사 · 형용사 등 모든 품사의 <b>기본형</b>이고 <b>두 글자 이상</b>이에요. 예) 행복, 기쁘다, 사랑하다. 추측은 한 글자 단어도 할 수 있어요.</li></ul>' +
       '<h4>🏆 점수와 순위</h4>' +
-      '<ul><li><b>정답 점수</b> = 150 − 추측 횟수 − 힌트 × 15 (최소 0점) — 적게 추측하고 힌트를 덜 쓸수록 높아요. 일찍 푼다고 더 받지는 않아요</li><li><b>연속 보너스</b> 이틀째부터 연속 정답 하루마다 +5 (최대 +30)</li><li><b>힌트</b>는 처음엔 못 써요. 추측 <b>5번마다 하나씩</b> 생기고 개수 제한은 없어요. 하나당 −15점. 지금까지 찾은 가장 가까운 단어보다 더 가까운 단어를 알려 줘요</li><li>포기하면 0점 · 연속 기록이 끊겨요</li><li>하루에 한 번만 기록돼요. 정답을 맞힌 뒤에도 계속 연습할 수 있어요.</li><li>순위는 오늘(점수 순) · 이번 주 · 시즌(분기) · 연속 정답 · 레이팅이 있어요. <b>다른 사람에게는 힌트 수와 점수만 보여요</b> (추측 횟수 · 걸린 시간은 나만 봐요).</li><li><b>레이팅</b>은 그 날 푼 사람끼리 추측 횟수를 겨루는 점수예요 (처음 1500점). 적게 맞히면 오르고 많이 맞히면 내려가요. 같으면 무승부, 포기는 꼴찌, 힌트 1개는 추측 5번으로 쳐요. 분기마다 새로 시작하고 3일 이상 참여하면 순위에 올라요.</li><li>순위에서 이름을 누르면 그 사람의 기록과 나와의 비교를 볼 수 있어요.</li></ul>' +
+      '<ul><li><b>정답 점수</b> = ' + BASE_PTS + ' − 추측 횟수 − 힌트 × ' + HINT_COST + ' (최소 0점) — 힌트를 안 쓰고 적게 추측할수록 높아요. 힌트 하나가 꽤 아파요. 일찍 푼다고 더 받지는 않아요</li><li><b>연속 보너스</b> 이틀째부터 연속 정답 하루마다 +5 (최대 +30)</li><li><b>힌트</b>는 처음엔 못 써요. 추측 <b>5번마다 하나씩</b> 생기고 개수 제한은 없어요. 하나당 −' + HINT_COST + '점. 지금까지 찾은 가장 가까운 단어보다 더 가까운 단어를 알려 줘요</li><li>포기하면 0점 · 연속 기록이 끊겨요</li><li>하루에 한 번만 기록돼요. 정답을 맞힌 뒤에도 계속 연습할 수 있어요.</li><li>순위는 오늘(점수 순) · 이번 주 · 시즌(분기) · 연속 정답 · 레이팅이 있어요. <b>다른 사람에게는 힌트 수와 점수만 보여요</b> (추측 횟수 · 걸린 시간은 나만 봐요).</li>' + (/jammanbo-beta/.test(location.pathname) ? '<li>🟩 <b>꼬들</b> 점수(정답 100 − 추측당 10 · 연속 보너스)도 주간 · 시즌 · 누적 점수에 더해져요. 정답 횟수 · 평균 · 연속 · 레이팅은 꼬맨틀만 셈</li>' : '') + '<li><b>레이팅</b>은 그 날 푼 사람끼리 추측 횟수를 겨루는 점수예요 (처음 1500점). 적게 맞히면 오르고 많이 맞히면 내려가요. 같으면 무승부, 포기는 꼴찌, 힌트 1개는 추측 5번으로 쳐요. 분기마다 새로 시작하고 3일 이상 참여하면 순위에 올라요.</li><li>순위에서 이름을 누르면 그 사람의 기록과 나와의 비교를 볼 수 있어요.</li></ul>' +
       '<h4>📱 팁</h4><p>한글 단어만 입력할 수 있어요 (영어 · 숫자는 안 돼요). ‘먹었다’ · ‘학교에서’ · ‘웃다’ 처럼 사전에 없는 꼴은 사전에 있는 가까운 꼴(‘먹다’ · ‘학교’ · ‘웃는’)로 바꿔 찾아요. 점수는 컴퓨터가 웹 · 위키백과 글에서 단어가 함께 쓰인 정도를 학습해 계산한 뜻 거리라서, 학습한 글에 따라 편향이 있거나 가끔 이상한 점수가 나올 수 있어요. 웃고 넘겨 주세요 😄</p><p class="hint">단어 벡터 출처: 페이스북(메타) 패스트텍스트, CC BY-SA 3.0 · 게임 방식은 뉴스젤리 꼬맨틀을 참고했어요.</p>' +
       '<div class="btns"><button type="button" class="btn pri" data-x>알겠어요</button></div>');
   }
@@ -547,6 +552,8 @@
   function setHead() {
     var st = S.srv && S.srv.stats;
     if (S.xl) { $('ttl').textContent = xlTitle(); $('sub').textContent = '저장됨'; return; }
+    if (S.view === 'kodle') { $('ttl').textContent = '꼬들'; $('sub').textContent = '자모 6개를 색깔로 맞혀라 · 점수는 꼬맨틀에 합산'; return; }
+    if (S.view !== 'kodle' && kodleSub()) { $('ttl').textContent = S.view === 'prac' ? '꼬들 연습' : '꼬들 기록'; $('sub').textContent = S.view === 'prac' ? '기록 없이 마음껏' : '꼬들 점수 · 연속 · 지난 판'; return; }
     if (S.view === 'prac') { $('ttl').textContent = '꼬맨틀 연습'; $('sub').textContent = '기록 없이 마음껏 — 힌트도 무제한'; return; }
     $('ttl').textContent = S.srv && S.srv.no ? '꼬맨틀 #' + S.srv.no : '꼬맨틀';
     $('sub').textContent = st && st.streak ? '🔥 ' + st.streak + '일 연속 정답 중' : '오늘의 비밀 단어를 찾아라';
@@ -563,14 +570,38 @@
   }
   function render() {
     if (!S.nick) return renderGate(!!session());
-    setHead(); tabsOn();
+    setHead(); tabsOn(); kodleTab();
     if (S.view === 'prac') renderPrac();
     else if (S.view === 'rank') renderRank();
     else if (S.view === 'hist') renderHist();
+    else if (S.view === 'kodle') renderKodle('play');
     else renderPlay();
     xlState();   // 엑셀 모드: 리본 · 수식 입력줄 · 상태 표시줄을 지금 화면에 맞춤
   }
 
+  /** (1.15.0) 🟩 꼬들 탭: 꼬들 모듈(../kodle/app.js)을 이 화면 안에 그림 — 점수는 꼬맨틀 주간 · 시즌 · 누적에 합산. 처음 열 때만 파일을 받음 */
+  var kodleP = null;
+  function loadKodle() {
+    if (window.JMB_KODLE) return Promise.resolve();
+    if (!kodleP) kodleP = new Promise(function (res, rej) { var s = document.createElement('script'); s.src = '../kodle/app.js?v=1.9.0'; s.onload = res; s.onerror = function () { kodleP = null; rej(new Error('꼬들 파일을 못 받았어요')); }; document.head.appendChild(s); });
+    return kodleP;
+  }
+  /** 꼬들이 보이는 화면인가: 🟩 꼬들 탭, 또는 연습 · 내 기록 탭에서 '꼬들' 을 고른 경우 */
+  function kodleSub() { return KODLE_ON && (S.view === 'kodle' || ((S.view === 'prac' || S.view === 'hist') && S.kSub[S.view] === 'kodle')); }
+  /** 연습 · 내 기록 위의 '꼬맨틀 | 꼬들' 선택 줄 */
+  function segHTML(v) {
+    var lab = v === 'prac' ? ['🔤 꼬맨틀 연습', '🟩 꼬들 연습'] : ['🔤 꼬맨틀 기록', '🟩 꼬들 기록'], on = S.kSub[v] === 'kodle' ? 1 : 0;
+    return '<nav class="seg" id="kSeg"><button type="button" data-ks="sem"' + (on ? '' : ' class="on"') + '>' + lab[0] + '</button><button type="button" data-ks="kodle"' + (on ? ' class="on"' : '') + '>' + lab[1] + '</button></nav>';
+  }
+  /** v = 'play'(🟩 꼬들 탭) · 'prac' · 'hist' — 꼬들 모듈을 이 화면 안에 그림 */
+  function renderKodle(v) {
+    v = v || 'play';
+    var old = $('kdHost'); if (old && old.isConnected && old.getAttribute('data-m') === v && window.JMB_KODLE) return;   // 이미 그려져 있으면 다시 그리지 않음 (입력 중이던 칸 보존)
+    var host = document.createElement('div'); host.id = 'kdHost'; host.setAttribute('data-m', v); host.style.display = 'contents';   // 엑셀 모드의 '.wrap > .card' 규칙이 그대로 먹도록
+    $('view').innerHTML = v === 'play' ? '' : segHTML(v); $('view').appendChild(host);
+    host.innerHTML = '<div class="card"><div class="empty">⏳ 꼬들을 불러오는 중…</div></div>';
+    loadKodle().then(function () { if (kodleSub() && $('view').lastChild === host) JMB_KODLE.mount(host, { embedded: true, mode: v, toast: toast }); }, function (e) { host.innerHTML = '<div class="card empty">' + esc(e.message) + '</div>'; });
+  }
   function metaCard() {
     var s = S.srv, h = '<div class="card"><div class="head"><div class="no">#' + s.no + '<small> 번째 문제</small></div><div class="meta">' +
       '오늘 <b>' + (s.solvedToday || 0) + '명</b>이 맞혔어요' + (s.yesterday ? '<br>어제 정답: <b>' + esc(s.yesterday) + '</b> <button type="button" class="btn sm" id="ydBtn">가까운 단어</button>' : '') + '</div></div>' +
@@ -588,7 +619,17 @@
     return '';
   }
   /** 끝나면 다음 게임으로: 꼬들 (두 글자 단어를 자모 색깔로 맞히기) */
-  function kodleLink() { return ''; }   // 꼬들은 아직 테스트에서만 — 운영에 공개할 때 되살림
+  /** 오늘 꼬들을 이 기기에서 끝냈는지 (꼬들 모듈이 저장해 둔 값) */
+  function kodleDoneToday() { try { var v = JSON.parse(localStorage.getItem('jmb_kodle_v1' + ENV_SFX) || 'null'); return !!(v && v.day === kstDay() && v.done); } catch (e) { return false; } }
+  /** 꼬맨틀 결과 카드 아래: 다음 코스(꼬들)로 이어가기 — 오늘 마친 사람 수만 보여 줌(결과 · 횟수는 비공개) */
+  function kodleLink() {
+    if (!KODLE_ON || (S.L && S.L.prac)) return '';
+    var n = S.srv && S.srv.kd;
+    if (kodleDoneToday()) return '<div class="card next"><h3>🎉 오늘 코스 완주!</h3><p>꼬맨틀 + 꼬들을 모두 끝냈어요. 점수는 순위에서 확인해 보세요.</p><div class="btns"><button type="button" class="btn pri" data-go="rank">' + xe('🏆 순위 보기') + '</button></div></div>';
+    return '<div class="card next"><h3>🟩 다음 코스 — 오늘의 꼬들</h3><p>두 글자 단어를 <b>자모 6칸</b>으로 맞히는 짧은 퍼즐이에요. 꼬들 점수도 꼬맨틀 순위에 더해져요.' + (n ? '<br>오늘 <b>' + n + '명</b>이 마쳤어요 — 몇 번 만에 풀었는지는 아무도 몰라요 🙂' : '') + '</p><div class="btns"><button type="button" class="btn pri" data-go="kodle">' + xe('🟩 이어서 꼬들 하러 가기 →') + '</button></div></div>';
+  }
+  /** 꼬들 탭 표시: 오늘 아직이면 주황 점 */
+  function kodleTab() { if (!KODLE_ON) return; var b = $('tabKodle'); if (b) b.innerHTML = '🟩 꼬들' + (kodleDoneToday() ? '' : ' <span class="kdot" aria-label="오늘 아직">●</span>'); }
   function resultCard() {
     var L = S.L, r = L.res, n = L.n;
     if (L.prac) return '<div class="card res pop"><div class="em">' + (L.win ? '🎉' : '👀') + '</div><h2>' + (L.win ? '정답이에요!' : '정답은 이거였어요') + '</h2>' +
@@ -598,8 +639,8 @@
     var h = '<div class="card res pop"><div class="em">' + (L.win ? '🎉' : '😵') + '</div><h2>' + (L.win ? '정답이에요!' : '아쉬워요') + '</h2>' +
       '<p>' + (L.win ? '<b>' + esc(S.vocab[S.ans]) + '</b> — ' + n + '번 만에 맞혔어요' + (L.hints ? ' · 힌트 ' + L.hints : '') : '정답은 <b>' + esc(S.vocab[S.ans]) + '</b> 였어요') + '</p>';
     if (S.busy && !r) {   // (1.14.0) 서버 확인을 기다리지 않고 결과부터 보여 줌 — 점수는 '잠정'(기본 점수 − 힌트), 서버가 확정하면 연속 보너스까지 반영해 바뀜
-      var base = L.win ? Math.max(0, 150 - n - 15 * (L.hints || 0)) : 0;
-      h += L.win ? '<div class="pts">+' + base + '점 <small>(잠정)</small></div><div class="parts"><span class="chip">기본 <b>' + Math.max(0, 150 - n) + '</b></span>' + (L.hints ? '<span class="chip">힌트 <b>-' + 15 * L.hints + '</b></span>' : '') + '<span class="chip">기록 확인 중…</span></div>'
+      var base = L.win ? Math.max(0, BASE_PTS - n - HINT_COST * (L.hints || 0)) : 0;
+      h += L.win ? '<div class="pts">+' + base + '점 <small>(잠정)</small></div><div class="parts"><span class="chip">기본 <b>' + Math.max(0, BASE_PTS - n) + '</b></span>' + (L.hints ? '<span class="chip">힌트 <b>-' + HINT_COST * L.hints + '</b></span>' : '') + '<span class="chip">기록 확인 중…</span></div>'
         : '<p class="hint">기록 확인 중…</p>';
     } else if (r && !r.error) {
       if (r.win) {
@@ -896,6 +937,18 @@
     if (t.parentNode && t.parentNode.id === 'rkTabs') { S.rkTab = t.getAttribute('data-t'); lsSet(LS.tab, S.rkTab); renderRank(); }
   });
   $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) go(b.getAttribute('data-v')); });
+  $('view').addEventListener('click', function (e) {
+    var k = e.target.closest('[data-ks]');   // 연습 · 내 기록의 '꼬맨틀 | 꼬들' 선택, 또는 '꼬들 연습' 으로 가는 버튼
+    if (k) { var tv = k.hasAttribute('data-go') ? k.getAttribute('data-go') : S.view; S.kSub[tv] = k.getAttribute('data-ks'); if (tv !== S.view) return go(tv); S.xAddr = ''; render(); return; }
+    var b = e.target.closest('[data-go]'); if (b) go(b.getAttribute('data-go'));   // 결과 카드의 '꼬들 하러 가기' · '순위' 등
+  });
+  /* (1.16.0) 꼬들: 위 탭 = 꼬맨틀 · 꼬들 · 연습 · 순위 · 내 기록. 연습 · 내 기록은 안에서 '꼬맨틀 | 꼬들' 을 고름 (꼬들은 한 화면에 다 들어오게) */
+  if (KODLE_ON) {
+    $('tabKodle').hidden = false; $('tabs').children[0].textContent = '🔤 꼬맨틀';
+    var _rp = renderPrac, _rh = renderHist;
+    renderPrac = function () { if (S.kSub.prac === 'kodle') renderKodle('prac'); else { _rp(); $('view').insertAdjacentHTML('afterbegin', segHTML('prac')); } };
+    renderHist = function () { if (S.kSub.hist === 'kodle') renderKodle('hist'); else { _rh(); $('view').insertAdjacentHTML('afterbegin', segHTML('hist')); } };
+  }
   /* 화면 이동과 뒤로가기: 오늘 문제 → 순위 · 내 기록은 한 칸 쌓아서(뒤로가기 = 오늘 문제), 순위 ↔ 내 기록은 갈아끼움. 창(모달)은 한 칸 쌓여서 뒤로가기로 닫힘 */
   function go(v) {
     if (v === S.view) { window.scrollTo(0, 0); return; }
@@ -973,7 +1026,7 @@
     if (!r || r.loginRequired || !r.me) { dayCacheClear(); S.nick = ''; return renderGate(!!session()); }   // 토큰이 만료됐거나 닉네임이 연결되지 않음
     if (!r.ready) { render(); return; }
     if (r.day !== S.srv.day) { dayCacheClear(); return bootFull(); }   // 날짜가 바뀜 → 새 표 (진행 중 추측은 판마다 따로 저장돼 있음)
-    var s = S.srv; s.my = r.my; s.stats = r.stats; s.solvedToday = r.solvedToday; s.yesterday = r.yesterday; s.me = r.me; s.people = r.people; S.nick = r.me;
+    var s = S.srv; s.my = r.my; s.kd = r.kd; s.stats = r.stats; s.solvedToday = r.solvedToday; s.yesterday = r.yesterday; s.me = r.me; s.people = r.people; S.nick = r.me;
     var L = S.L, my = r.my;
     mergeServer(L, my);
     if (!L.done && L.g.length === 0) L.rec = !!(S.nick && my && my.state !== '완료');
