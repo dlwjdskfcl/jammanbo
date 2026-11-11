@@ -6,7 +6,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.14.2';
+  var VER = '1.14.3';
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
   var ENV_SFX = ENV !== 'prod' ? '_' + ENV : '';
@@ -588,7 +588,7 @@
     return '';
   }
   /** 끝나면 다음 게임으로: 꼬들 (두 글자 단어를 자모 색깔로 맞히기) */
-  function kodleLink() { return '<p style="text-align:center;margin:8px 0"><a class="btn" href="../kodle/">' + xe('🟩 이어서 꼬들 하러 가기') + '</a></p>'; }
+  function kodleLink() { return ''; }   // 꼬들은 아직 테스트에서만 — 운영에 공개할 때 되살림
   function resultCard() {
     var L = S.L, r = L.res, n = L.n;
     if (L.prac) return '<div class="card res pop"><div class="em">' + (L.win ? '🎉' : '👀') + '</div><h2>' + (L.win ? '정답이에요!' : '정답은 이거였어요') + '</h2>' +
