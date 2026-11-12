@@ -6,10 +6,11 @@
  */
 (function () {
   'use strict';
-  var VER = '1.17.1';
+  var VER = '1.20.0';
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
   function kstDay() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
+  var KODLE_LOCK_FROM = '2026-11-13';   // 이 날부터 꼬들은 그날 꼬맨틀을 끝낸 사람만 열림 (꼬맨틀 → 꼬들 순서). 서버 Kodle.js KODLE_CFG_.LOCK_FROM 과 같게
   var KODLE_FROM = '2026-11-12';   // 꼬들 공개일(KST) — 운영은 이 날부터 탭이 켜짐 (미리 올려 두면 자정에 자동으로 열림). 테스트 사이트는 늘 켜짐
   var KODLE_ON = /jammanbo-beta/.test(location.pathname) || ENV !== 'prod' || kstDay() >= KODLE_FROM;
   var ENV_SFX = ENV !== 'prod' ? '_' + ENV : '';
@@ -583,7 +584,7 @@
   var kodleP = null;
   function loadKodle() {
     if (window.JMB_KODLE) return Promise.resolve();
-    if (!kodleP) kodleP = new Promise(function (res, rej) { var s = document.createElement('script'); s.src = '../kodle/app.js?v=1.10.0'; s.onload = res; s.onerror = function () { kodleP = null; rej(new Error('꼬들 파일을 못 받았어요')); }; document.head.appendChild(s); });
+    if (!kodleP) kodleP = new Promise(function (res, rej) { var s = document.createElement('script'); s.src = '../kodle/app.js?v=1.12.0'; s.onload = res; s.onerror = function () { kodleP = null; rej(new Error('꼬들 파일을 못 받았어요')); }; document.head.appendChild(s); });
     return kodleP;
   }
   /** 꼬들이 보이는 화면인가: 🟩 꼬들 탭, 또는 연습 · 내 기록 탭에서 '꼬들' 을 고른 경우 */
@@ -596,11 +597,12 @@
   /** v = 'play'(🟩 꼬들 탭) · 'prac' · 'hist' — 꼬들 모듈을 이 화면 안에 그림 */
   function renderKodle(v) {
     v = v || 'play';
+    if (v === 'play' && kodleLocked()) { $('view').innerHTML = lockCard(); return; }   // 순서 잠금: 꼬맨틀을 끝내기 전엔 꼬들 오늘 판을 열지 않음
     var old = $('kdHost'); if (old && old.isConnected && old.getAttribute('data-m') === v && window.JMB_KODLE) return;   // 이미 그려져 있으면 다시 그리지 않음 (입력 중이던 칸 보존)
     var host = document.createElement('div'); host.id = 'kdHost'; host.setAttribute('data-m', v); host.style.display = 'contents';   // 엑셀 모드의 '.wrap > .card' 규칙이 그대로 먹도록
     $('view').innerHTML = v === 'play' ? '' : segHTML(v); $('view').appendChild(host);
     host.innerHTML = '<div class="card"><div class="empty">⏳ 꼬들을 불러오는 중…</div></div>';
-    loadKodle().then(function () { if (kodleSub() && $('view').lastChild === host) JMB_KODLE.mount(host, { embedded: true, mode: v, toast: toast }); }, function (e) { host.innerHTML = '<div class="card empty">' + esc(e.message) + '</div>'; });
+    loadKodle().then(function () { if (kodleSub() && $('view').lastChild === host) JMB_KODLE.mount(host, { embedded: true, mode: v, toast: toast, onCell: function (addr, txt) { if (!S.xl) return; var nb = $('nameBox'); if (nb) nb.textContent = addr; var gw = $('gw'); if (gw) gw.value = txt || ''; } }); }, function (e) { host.innerHTML = '<div class="card empty">' + esc(e.message) + '</div>'; });
   }
   function metaCard() {
     var s = S.srv, h = '<div class="card"><div class="head"><div class="no">#' + s.no + '<small> 번째 문제</small></div><div class="meta">' +
@@ -628,8 +630,14 @@
     if (kodleDoneToday()) return '<div class="card next"><h3>🎉 오늘 코스 완주!</h3><p>꼬맨틀 + 꼬들을 모두 끝냈어요. 점수는 순위에서 확인해 보세요.</p><div class="btns"><button type="button" class="btn pri" data-go="rank">' + xe('🏆 순위 보기') + '</button></div></div>';
     return '<div class="card next"><h3>🟩 다음 코스 — 오늘의 꼬들</h3><p>두 글자 단어를 <b>자모 6칸</b>으로 맞히는 짧은 퍼즐이에요. 꼬들 점수도 꼬맨틀 순위에 더해져요.' + (n ? '<br>오늘 <b>' + n + '명</b>이 마쳤어요 — 몇 번 만에 풀었는지는 아무도 몰라요 🙂' : '') + '</p><div class="btns"><button type="button" class="btn pri" data-go="kodle">' + xe('🟩 이어서 꼬들 하러 가기 →') + '</button></div></div>';
   }
-  /** 꼬들 탭 표시: 오늘 아직이면 주황 점 */
-  function kodleTab() { if (!KODLE_ON) return; var b = $('tabKodle'); if (b) b.innerHTML = '🟩 꼬들' + (kodleDoneToday() ? '' : ' <span class="kdot" aria-label="오늘 아직">●</span>'); }
+  /** 오늘 꼬맨틀을 끝냈는지(맞힘 · 포기 모두) — 연습 중이어도 오늘 판 상태를 봄 */
+  function semDoneToday() { var td = S.ctx === 'td' ? S : S.hold.td; if (!td) return false; var my = td.srv && td.srv.my; return !!((my && my.state === '완료') || (td.L && td.L.done)); }
+  function kodleLocked() { return KODLE_ON && kstDay() >= KODLE_LOCK_FROM && !semDoneToday(); }
+  /** 꼬들 탭 표시: 잠겨 있으면 🔒 · 오늘 아직이면 주황 점 */
+  function kodleTab() { if (!KODLE_ON) return; var b = $('tabKodle'); if (b) b.innerHTML = kodleLocked() ? '🔒 꼬들' : '🟩 꼬들' + (kodleDoneToday() ? '' : ' <span class="kdot" aria-label="오늘 아직">●</span>'); }
+  function lockCard() {
+    return '<div class="card next"><h3>🔒 꼬들은 꼬맨틀을 마친 뒤에 열려요</h3><p>오늘 코스는 <b>꼬맨틀 → 꼬들</b> 순서예요. 꼬맨틀을 끝내면(맞히든 포기하든) 꼬들이 열려요. 꼬들 연습은 언제든 할 수 있어요.</p><div class="btns"><button type="button" class="btn pri" data-go="play">' + xe('🔤 꼬맨틀 하러 가기') + '</button><button type="button" class="btn" data-go="prac" data-ks="kodle">' + xe('🌱 꼬들 연습') + '</button></div></div>';
+  }
   function resultCard() {
     var L = S.L, r = L.res, n = L.n;
     if (L.prac) return '<div class="card res pop"><div class="em">' + (L.win ? '🎉' : '👀') + '</div><h2>' + (L.win ? '정답이에요!' : '정답은 이거였어요') + '</h2>' +
@@ -820,13 +828,22 @@
     if (!list || !list.length) return kind === 'rate' ? '<div class="empty">아직 레이팅 순위에 오른 사람이 없어요.<br>하루에 두 명 이상 풀고, 3일 이상 참여하면 올라와요! 📈</div>' : '<div class="empty">아직 기록이 없어요.<br>첫 번째 주인공이 되어 보세요! 🏁</div>';
     return list.map(function (o) {
       var me = S.nick && o.nick === S.nick, sub, v;
-      if (kind === 'today') { sub = o.h ? '힌트 ' + o.h + '개' : '힌트 없이'; v = '+' + o.pts + '점'; }
+      if (kind === 'today') {   // (1.20.0) 꼬맨틀 + 꼬들 오늘 점수 합. 포기 · 실패한 사람도 한 게임이라도 했으면 나옴
+        var ps = []; if (o.s) ps.push('🔤 ' + (o.s === '정답' ? (o.h ? '힌트 ' + o.h + '개' : '힌트 없이') : '포기')); if (KODLE_ON && o.k) ps.push('🟩 ' + (o.k === '정답' ? '성공' : '실패'));
+        sub = ps.join(' · ') || '참여'; v = '+' + (o.pts || 0) + '점'; }
       else if (kind === 'streak') { sub = '최고 ' + o.best + '일'; v = '🔥 ' + o.v + '일'; }
       else if (kind === 'rate') { var T = tierOf(o.v); sub = o.games + '일 참여 · 최근 ' + (o.delta > 0 ? '+' : '') + o.delta; v = T.e + ' ' + o.v + '<small>' + T.n + '</small>'; }
       else { sub = '정답 ' + o.solves + '회'; v = o.v + '점'; }
       return '<div class="rk tap' + (me ? ' me' : '') + '" data-nick="' + esc(o.nick) + '"><span class="n' + (o.rank <= 3 ? ' m' + o.rank : '') + '">' + (o.rank === 1 ? '🥇' : o.rank === 2 ? '🥈' : o.rank === 3 ? '🥉' : o.rank) + '</span>' + av(o.nick, 32) +
         '<span class="t"><b>' + esc(o.nick) + '</b><small>' + esc(sub) + '</small></span><span class="v">' + v + '</span></div>';
     }).join('');
+  }
+  /** 현황 표: 오늘 꼬맨틀 · 꼬들 결과 + 오늘을 뺀 성공 횟수 */
+  function rkBoard(R) {
+    var L = R.board || [], mark = function (r) { return r === '정답' ? '<span class="bk ok">✅</span>' : r ? '<span class="bk no">❌</span>' : '<span class="bk">–</span>'; };
+    if (!L.length) return '<div class="empty">아직 기록이 없어요</div>';
+    return '<div class="tablewrap"><table class="stt"><thead><tr><th class="l">닉네임</th><th>오늘<br>꼬맨틀</th>' + (KODLE_ON ? '<th>오늘<br>꼬들</th>' : '') + '<th>꼬맨틀<br>성공</th>' + (KODLE_ON ? '<th>꼬들<br>성공</th>' : '') + '</tr></thead><tbody>' +
+      L.map(function (o) { return '<tr' + (o.nick === R.me ? ' class="me"' : '') + '><td class="l">' + esc(o.nick) + (o.nick === R.me ? ' <small>(나)</small>' : '') + '</td><td>' + mark(o.ts) + '</td>' + (KODLE_ON ? '<td>' + mark(o.tk) + '</td>' : '') + '<td class="num">' + o.sx + '</td>' + (KODLE_ON ? '<td class="num">' + o.kx + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div>';
   }
   function renderRank() {
     var R = S.rank;
@@ -840,12 +857,18 @@
         '<div class="hint" style="margin-top:6px">평균 추측 ' + (me.avg || '-') + '번 · 누적 ' + me.points + '점 · 최고 연속 ' + me.bestStreak + '일 · 최소 ' + (me.best || '-') + '번' + (me.firsts ? ' · 선두 ' + me.firsts + '번' : '') + '</div>' +
         '<div class="badges">' + BADGES.map(function (b) { return '<div class="badge' + (have[b.id] ? '' : ' off') + '" title="' + esc(b.d) + '"><div class="e">' + b.e + '</div><b>' + esc(b.n) + '</b><small>' + esc(b.d) + '</small></div>'; }).join('') + '</div></div>';
     } else h += '<div class="note warn">🔒 로그인하면 내 순위와 배지를 볼 수 있어요.<br><button type="button" class="btn sm" id="login">카카오 로그인</button></div>';
-    var tabs = [['today', '오늘'], ['week', '이번 주'], ['season', '시즌'], ['streak', '연속'], ['rate', '레이팅']];
+    var tabs = [['today', '오늘'], ['board', '현황'], ['week', '이번 주'], ['season', '시즌'], ['streak', '연속'], ['rate', '레이팅']];
     var tab = S.rkTab, list = tab === 'today' ? R.today : tab === 'week' ? R.weekly : tab === 'season' ? R.seasonal : tab === 'rate' ? R.rated : R.streaks;
-    var title = tab === 'today' ? '오늘의 정답자 <small>' + R.day + ' · 점수 순</small>' : tab === 'week' ? '이번 주 포인트 <small>' + R.week + '(월)~</small>' : tab === 'season' ? '시즌 포인트 <small>' + R.season + '</small>' : tab === 'rate' ? '레이팅 <small>' + R.season + ' · 3일 이상 참여</small>' : '연속 정답 <small>지금 이어가는 중</small>';
+    if (tab === 'board') {   // (1.18.0) 현황: 사람마다 오늘 꼬맨틀 · 꼬들 성공 여부 + 오늘을 뺀 누적 성공 횟수 (추측 횟수 · 시간은 공개 안 함)
+      h += '<div class="seg sm" id="rkTabs">' + tabs.map(function (t) { return '<button type="button" data-t="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+        '<div class="card"><h3>📋 오늘 현황 <small>' + R.day + ' · 성공 횟수는 오늘 제외</small></h3>' + rkBoard(R) + '</div>' +
+        '<p class="hint">✅ 성공 · ❌ 아쉽게 실패 · – 아직. 몇 번 만에 풀었는지 · 걸린 시간은 나만 볼 수 있어요. 순위는 1분마다 갱신돼요.</p>';
+      $('view').innerHTML = h; return;
+    }
+    var title = tab === 'today' ? '오늘의 참여자 <small>' + R.day + ' · 오늘 점수 순 (꼬맨틀 + 꼬들)</small>' : tab === 'week' ? '이번 주 포인트 <small>' + R.week + '(월)~</small>' : tab === 'season' ? '시즌 포인트 <small>' + R.season + '</small>' : tab === 'rate' ? '레이팅 <small>' + R.season + ' · 3일 이상 참여</small>' : '연속 정답 <small>지금 이어가는 중</small>';
     h += '<div class="seg sm" id="rkTabs">' + tabs.map(function (t) { return '<button type="button" data-t="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div>' +
       '<div class="card"><h3>' + title + '</h3>' + rkRows(list, tab === 'week' || tab === 'season' ? 'pts' : tab) +
-      (tab === 'today' ? '<div class="hint">오늘 ' + R.solvedToday + '명 정답 · 참여 회원 ' + (typeof R.total === 'number' ? R.total : typeof R.people === 'number' ? R.people : Object.keys(R.people || {}).length) + '명</div>' : '') +
+      (tab === 'today' ? '<div class="hint">오늘 꼬맨틀 ' + R.solvedToday + '명 정답 · 오늘 한 사람 ' + (R.today || []).length + '명 · 누적 참여 회원 ' + (typeof R.total === 'number' ? R.total : typeof R.people === 'number' ? R.people : Object.keys(R.people || {}).length) + '명</div>' : '') +
       (tab === 'rate' ? '<div class="hint">그 날 푼 사람끼리 추측 횟수를 겨루는 점수 (처음 1500점). 오늘 결과는 잠정이라 사람이 더 풀면 조금 바뀌어요.</div>' : '') + '</div>' + pendingCard(R) +
       '<p class="hint">순위는 1분마다 갱신돼요. 시즌은 분기(1 · 4 · 7 · 10월)마다 새로 시작해요.</p>';
     $('view').innerHTML = h;
