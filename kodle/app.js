@@ -4,13 +4,14 @@
  * 오늘 문제는 카카오 로그인한 회원이면 서버(Kodle.js)에 기록돼 점수가 꼬맨틀 주간 · 시즌 · 누적 점수에 더해짐 (정답은 서버가 확인). 연습 판 · 로그인 안 한 판은 이 기기에만 저장. */
 (function () {
   'use strict';
-  var VER = '1.13.0', TRIES = 6, LEN = 6, START = Date.UTC(2026, 10, 12), LOGMAX = 400;
+  var VER = '1.15.2', TRIES = 6, LEN = 6, START = Date.UTC(2026, 10, 12), LOGMAX = 400;
   var CFG = window.JMB_CONFIG || {}, ENV = CFG.env || 'prod', SFX = ENV !== 'prod' ? '_' + ENV : '';
   var KEY = 'jmb_kodle_v1' + SFX, KLOG = 'jmb_kodle_log' + SFX, KST = 'jmb_kodle_st' + SFX, KHELP = 'jmb_kodle_help', KAUTH = 'jmb_kakao_v2' + SFX;
   var CH = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
   var JU = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅗㅏ', 'ㅗㅐ', 'ㅗㅣ', 'ㅛ', 'ㅜ', 'ㅜㅓ', 'ㅜㅔ', 'ㅜㅣ', 'ㅠ', 'ㅡ', 'ㅡㅣ', 'ㅣ'];
   var JO = ['', 'ㄱ', 'ㄲ', 'ㄱㅅ', 'ㄴ', 'ㄴㅈ', 'ㄴㅎ', 'ㄷ', 'ㄹ', 'ㄹㄱ', 'ㄹㅁ', 'ㄹㅂ', 'ㄹㅅ', 'ㄹㅌ', 'ㄹㅍ', 'ㄹㅎ', 'ㅁ', 'ㅂ', 'ㅂㅅ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
-  var ROWS = ['ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅ', 'ㅆㅇㅈㅉㅊㅋㅌㅍㅎ', 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅛ', 'ㅜㅠㅡㅣ'];   // 자음(쌍자음 포함) 2줄 · 모음 2줄 — 키가 전부 보임. 쌍자음 · ㅐ ㅒ ㅔ ㅖ 키는 기본 자모 둘로 풀려서 들어감
+  var ROWS = ['ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔ', 'ㅁㄴㅇㄹㅎㅗㅓㅏㅣ', 'ㅋㅌㅊㅍㅠㅜㅡ'];   // (1.14.0) 컴퓨터 자판(쿼티 · 두벌식) 배열. ⇧ 를 누르면 ㅂㅈㄷㄱㅅ → ㅃㅉㄸㄲㅆ · ㅐㅔ → ㅒㅖ (키 위 작은 글자가 ⇧ 를 눌렀을 때)
+  var COMP = { 'ㅘ': 'ㅗㅏ', 'ㅙ': 'ㅗㅐ', 'ㅚ': 'ㅗㅣ', 'ㅝ': 'ㅜㅓ', 'ㅞ': 'ㅜㅔ', 'ㅟ': 'ㅜㅣ', 'ㅢ': 'ㅡㅣ' };   // 겹모음 키: 한 번 누르면 기본 자모 두 칸(ㅗ+ㅏ …)
   var SHIFTED = { 'ㅂ': 'ㅃ', 'ㅈ': 'ㅉ', 'ㄷ': 'ㄸ', 'ㄱ': 'ㄲ', 'ㅅ': 'ㅆ', 'ㅐ': 'ㅒ', 'ㅔ': 'ㅖ' }, shift = false;
   var PHYS = { KeyQ: 'ㅂ', KeyW: 'ㅈ', KeyE: 'ㄷ', KeyR: 'ㄱ', KeyT: 'ㅅ', KeyY: 'ㅛ', KeyU: 'ㅕ', KeyI: 'ㅑ', KeyA: 'ㅁ', KeyS: 'ㄴ', KeyD: 'ㅇ', KeyF: 'ㄹ', KeyG: 'ㅎ', KeyH: 'ㅗ', KeyJ: 'ㅓ', KeyK: 'ㅏ', KeyL: 'ㅣ', KeyZ: 'ㅋ', KeyX: 'ㅌ', KeyC: 'ㅊ', KeyV: 'ㅍ', KeyB: 'ㅠ', KeyN: 'ㅜ', KeyM: 'ㅡ', KeyO: 'ㅐ', KeyP: 'ㅔ' };
   var BASE = (document.currentScript && document.currentScript.src ? document.currentScript.src : location.href).replace(/[?#].*$/, '').replace(/[^\/]*$/, '');
@@ -69,8 +70,13 @@
     return r;
   }
   function grid(m) { return m.guesses.map(function (w) { return score(w, m.ans).map(function (x) { return x === 'g' ? '🟩' : x === 'y' ? '🟨' : '⬛'; }).join(''); }).join('\n'); }
-  /** 공유 글: 추측 횟수 · 칸 색 · 점수는 넣지 않음 (단톡방에서 횟수가 드러나 부끄럽지 않게) — 끝냈다는 것만. 실패해도 똑같이 '도전 완료' */
-  function shareText(m) { return '🟩 꼬들 ' + (m.prac ? '연습' : '#' + (m.no + 1)) + (m.win && !m.prac ? ' 🎉 정답!' : ' 도전 완료'); }
+  /** 공유 글 (꼬맨틀과 같은 모양): 첫 줄 '🟩 꼬들 #N 🎉/😵', 둘째 줄 '⭐점수점'(맞혔고 서버가 확정했을 때) · 못 맞히면 '오늘은 아쉽게…'. 추측 횟수 · 칸 색은 넣지 않음 (단톡방에서 횟수가 드러나 부끄럽지 않게) */
+  function shareText(m) {
+    var head = '🟩 꼬들 ' + (m.prac ? '연습' : '#' + (m.no + 1)) + (m.win ? ' 🎉' : ' 😵');
+    if (!m.win) return head + '\n오늘은 아쉽게…';
+    var r = !m.prac && SV.res && SV.res.final && SV.res.win && SV.res.points != null ? SV.res.points : null;
+    return head + (r != null ? '\n⭐' + r + '점' : '');
+  }
 
   /* ── 판 만들기 · 기록 ── */
   function newGame(prac) {
@@ -114,7 +120,7 @@
       if (!m.done || m.guesses.length !== g.length) { m.guesses = g; m.done = true; m.win = my.result === '정답'; persist(m); }
       SV.res = { win: m.win, guesses: my.guesses, points: my.points, streak: my.streak, parts: my.parts, final: true };
     } else if (m.done && my.state === '진행중' && !SV.sending && !SV.res) srvSubmit(m);   // 이 기기에서 끝났는데 서버에는 진행 중으로 남아 있으면 다시 보냄
-    else if (m.done && my.state === 'ready' && !SV.res) SV.res = { failed: true, msg: '로그인하기 전에 푼 판이라 점수에는 안 들어가요' };
+    else if (m.done && my.state === 'ready' && !SV.res) SV.res = { failed: true, msg: '로그인 전이거나 서버에 연결되지 않은 상태에서 푼 판이에요. 내일 판부터는 정상으로 기록돼요' };
     else if (my.state === '진행중' && !m.done && g.length > m.guesses.length) { m.guesses = g; persist(m); }
     render();
   }
@@ -122,6 +128,26 @@
     if (SV.nonce) return Promise.resolve(SV.nonce);
     if (!SV.starting) SV.starting = api('kodleStart', [token()]).then(function (r) { SV.nonce = r.nonce; return r.nonce; }, function (e) { SV.starting = null; throw e; });
     return SV.starting;
+  }
+  /** (1.15.0) 서버에 판을 시작하지 못했을 때: 조용히 넘기지 않고 알리고(안내 띠 + 알림) 몇 번 자동으로 다시 시도 — 연결이 돌아오면 지금까지 추측도 저장 */
+  var retryT = 0, retryN = 0;
+  function startFail(e) {
+    var msg = (e && e.message) || '연결 실패';
+    SV.startErr = msg;
+    if (/먼저 끝내|꼬맨틀 → 꼬들/.test(msg)) { render(); return; }   // 순서 잠금은 재시도 대상이 아님
+    if (retryN === 0) toast('서버 연결이 불안정해요. 이 판 기록을 자동으로 다시 시도해요…', true);
+    render();
+    if (retryN < 4) {
+      retryN++; clearTimeout(retryT);
+      retryT = setTimeout(function () {
+        if (!srvOn()) return;
+        ensureStarted().then(function () {
+          SV.startErr = ''; retryN = 0; toast('서버에 연결됐어요 ✅ 이 판이 기록돼요');
+          var m = GM.play; if (m && !m.done && m.guesses.length) srvSave(m);
+          render();
+        }, startFail);
+      }, 3000 * retryN);
+    }
   }
   function srvSave(m) { if (m.prac || !srvOn()) return; ensureStarted().then(function (n) { return api('kodleSave', [token(), n, m.guesses.join('|')]); }).catch(function () {}); }
   function srvSubmit(m) {
@@ -140,7 +166,7 @@
     return st;
   }
   /** 겹글자 키(ㄲ · ㅐ …)는 풀린 자모가 모두 같은 상태일 때만 색을 보여 줌 */
-  function keySt(c, st) { return st[c]; }
+  function keySt(c, st) { var e = COMP[c]; if (!e) return st[c]; var x = st[e.charAt(0)], y = st[e.charAt(1)]; return x && x === y ? x : ''; }
   var KX = false;   // 엑셀 모드(꼬맨틀 화면 안에서 html.xl 일 때): 칸을 스프레드시트처럼 — 게임 방식은 그대로
   var COLS = 'ABCDEF';
   function boardHTML(m, cur, pop) {
@@ -171,17 +197,23 @@
   function cellInfo(m) { if (!KX || !opt.onCell) return; var a = activeCell(m, CUR[view]); opt.onCell(a ? COLS.charAt(a.c) + (a.r + 1) : 'A1', m.done ? m.aw : CUR[view]); }
   function keysHTML(m) {
     var st = keyStates(m), CONS = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
-    function btn(c) { return '<button type="button" class="' + (CONS.indexOf(c) >= 0 ? 'cn ' : 'vw ') + (keySt(c, st) || '') + '" data-k="' + c + '">' + c + '</button>'; }
-    return '<div class="keys">' + ROWS.map(function (row, i) {
-      return '<div class="kr">' + (i === 3 ? '<button type="button" class="w pri" data-k="Enter">입력</button>' : '') + row.split('').map(btn).join('') + (i === 3 ? '<button type="button" class="w" data-k="Back" aria-label="지우기">⌫</button>' : '') + '</div>';
-    }).join('') + '</div>';
+    function btn(c) {
+      var sh = SHIFTED[c], d = shift && sh ? sh : c;   // ⇧ 가 눌려 있으면 쌍자음 · ㅒㅖ 가 들어감
+      return '<button type="button" class="' + (CONS.indexOf(d) >= 0 ? 'cn ' : 'vw ') + (keySt(d, st) || '') + (sh ? ' sk' : '') + '" data-k="' + d + '">' + d + (sh ? '<i class="sg">' + (shift ? c : sh) + '</i>' : '') + '</button>';
+    }
+    function cbtn(c) { return '<button type="button" class="vw cp ' + (keySt(c, st) || '') + '" data-k="' + c + '" title="' + COMP[c] + '">' + c + '</button>'; }
+    return '<div class="keys">' +
+      '<div class="kr">' + ROWS[0].split('').map(btn).join('') + '</div>' +
+      '<div class="kr">' + ROWS[1].split('').map(btn).join('') + '<button type="button" class="w pri" data-k="Enter">입력</button></div>' +
+      '<div class="kr"><button type="button" class="w' + (shift ? ' on' : '') + '" data-k="Shift" aria-label="쌍자음 · ㅒ ㅖ (Shift)" aria-pressed="' + (shift ? 'true' : 'false') + '">⇧</button>' + ROWS[2].split('').map(btn).join('') + '<button type="button" class="w" data-k="Back" aria-label="지우기">⌫</button></div>' +
+      '<div class="kr kc">' + Object.keys(COMP).map(cbtn).join('') + '</div></div>';
   }
   /** 오늘 판 점수 칸: 서버가 확정한 값 · 확정 전에는 잠정(기본 점수만) · 로그인 안 했으면 안내 */
   function scoreHTML(m) {
-    if (!token()) return '<p class="hint">로그인하면 이 결과가 꼬맨틀 순위 점수에 합산돼요. <a href="#" id="resLogin">카카오 로그인</a></p>';
+    if (!token()) return '<p class="hint">로그인하면 이 결과가 꼬맨틀 순위 점수에 합산돼요. <a href="#" id="kdResLogin">카카오 로그인</a></p>';
     if (SV.err === 'list') return '<p class="hint">⚠️ 점수 연동 점검 중이라 이번 판은 이 기기에만 기록돼요.</p>';
     var r = SV.res;
-    if (r && r.failed) return '<p class="hint">⚠️ 점수 저장에 실패했어요 (' + esc(r.msg) + '). 이 기기에는 기록돼 있어요.</p>';
+    if (r && r.failed) return '<p class="hint">⚠️ 이 판이 서버에 저장되지 않았어요 (' + esc(r.msg) + '). 이 기기의 \'내 기록\'에는 남아 있어요. ' + (/너무 빨리|정답이 달라|기록할 판을 찾을 수 없/.test(r.msg) ? '' : '<button type="button" class="btn sm" id="kdRetry">다시 시도</button>') + '</p>';
     if (r && r.final) {
       if (!r.win) return '<p class="hint">0점 — 내일 다시 도전! (기록은 서버에 저장됐어요)</p>';
       var p = r.parts || {};
@@ -191,7 +223,8 @@
     return m.win ? '<div class="pts">+' + base + '점 <small>(잠정)</small></div><div class="parts"><span class="chip">기록 확인 중…</span></div>' : '<p class="hint">기록 확인 중…</p>';
   }
   function bannerHTML() {
-    if (!token()) return '<div class="note">🔑 로그인하면 꼬들 점수가 <b>꼬맨틀 순위</b>에 합산돼요. <button type="button" class="btn sm pri" id="bnLogin">카카오 로그인</button></div>';
+    if (!token()) return '<div class="note">🔑 로그인하면 꼬들 점수가 <b>꼬맨틀 순위</b>에 합산돼요. <button type="button" class="btn sm pri" id="kdBnLogin">카카오 로그인</button></div>';
+    if (SV.startErr && GM.play && !GM.play.done && !/먼저 끝내/.test(SV.startErr)) return '<div class="note warn">⚠️ 서버 연결이 불안정해요. 자동으로 다시 시도 중이에요 — 계속 안 되면 이 판은 이 기기에만 기록될 수 있어요.</div>';
     if (SV.err === 'list') return '<div class="note warn">⚠️ 점수 연동을 점검 중이에요. 풀 수는 있지만 이번 판은 기록되지 않아요.</div>';
     if (SV.today && SV.today.semDone === false && !GM.play.done) return '<div class="note">🔤 코스: <b>오늘 꼬맨틀 → 꼬들</b>. 꼬들 점수도 꼬맨틀 점수에 더해져요. <a class="btn sm" href="../semantle/">꼬맨틀 하러 가기</a></div>';
     return '';
@@ -207,12 +240,12 @@
   function resultHTML(m) {
     if (!m.done) return '';
     var emb = !!opt.embedded;
-    var more = m.prac ? '<button type="button" class="btn" id="pracNext">🔁 다른 문제</button>'
+    var more = m.prac ? '<button type="button" class="btn" id="kdNext">🔁 다른 문제</button>'
       : emb ? '<button type="button" class="btn" data-go="rank">🏆 순위</button><button type="button" class="btn" data-go="prac" data-ks="kodle">🌱 연습</button>'
-      : '<button type="button" class="btn" id="goPrac">🌱 연습</button><a class="btn" href="../semantle/">🔤 꼬맨틀</a>';
+      : '<button type="button" class="btn" id="kdGoPrac">🌱 연습</button><a class="btn" href="../semantle/">🔤 꼬맨틀</a>';
     return '<div class="kres"><div class="khead"><span class="em">' + (m.win ? '🎉' : '😵') + '</span><b>' + (m.win ? '정답이에요!' : '아쉬워요') + '</b></div>' +
       '<p class="ans">' + (m.win ? '<b>' + esc(m.aw) + '</b> — ' + m.guesses.length + '번 만에 맞혔어요' : '정답은 <b>' + esc(m.aw) + '</b> 였어요') + ' <small>(' + m.ans.split('').join(' ') + ')</small>' + (m.prac ? ' <small>· 연습(기록 없음)</small>' : '') + '</p>' +
-      (m.prac ? '' : scoreHTML(m) + courseHTML(m)) + '<div class="btns"><button type="button" class="btn pri" id="share">결과 복사</button>' + more + '</div>' +
+      (m.prac ? '' : scoreHTML(m) + courseHTML(m)) + '<div class="btns"><button type="button" class="btn pri" id="kdShare">📤 카톡으로 공유</button>' + more + '</div>' +
       (m.prac ? '' : '<p class="hint" style="text-align:center;margin:4px 0 0">다음 문제는 내일 00:00에 열려요</p>') + '</div>';
   }
   /** (1.12.0) 순서 잠금: 서버가 locked 라고 하면(2026-11-13~, 오늘 꼬맨틀을 아직 안 끝냄) 게임 대신 안내 */
@@ -224,7 +257,7 @@
     var m = GM[which];
     if (which === 'play' && SV.today && SV.today.locked) return lockHTML();
     return (which === 'play' ? bannerHTML() : '') + '<div class="card kd' + (opt.embedded ? ' kemb' : '') + (KX ? ' kx' : '') + '"><div class="kh"><b>' + (which === 'play' ? '오늘의 꼬들 <span class="tag">#' + (m.no + 1) + '</span>' : '연습 문제 <span class="tag">기록 없음</span>') + '</b><small>' + m.guesses.length + '/' + TRIES + '</small></div>' +
-      boardHTML(m, CUR[which], false) + '<div class="kmsg" id="msg"></div>' + (m.done ? resultHTML(m) : keysHTML(m)) + '</div>';
+      boardHTML(m, CUR[which], false) + '<div class="kmsg" id="kdMsg"></div>' + (m.done ? resultHTML(m) : keysHTML(m)) + '</div>';
   }
   /** 한 화면에 다 들어오게: 칸 · 키 크기를 화면 남은 높이 · 너비에 맞춰 정함 (스크롤 없이 보드 + 키보드 / 결과) */
   function fit() {
@@ -255,7 +288,7 @@
   function histHTML() {
     var sv = SV.today && SV.today.stats, st = sv ? { played: sv.plays, wins: sv.wins, streak: sv.streak, best: sv.best, dist: sv.dist } : stats(), mx = Math.max.apply(null, st.dist.concat(1)), RA = rowsAll(), h = '';
     if (sv) h += '<div class="card"><h3>🏆 꼬들 점수 <small>꼬맨틀 순위에 합산</small></h3><div class="stats4"><div><b>' + sv.points + '</b><span>누적</span></div><div><b>' + sv.week + '</b><span>이번 주</span></div><div><b>' + sv.season + '</b><span>이번 시즌</span></div><div><b>' + sv.avg + '</b><span>평균 추측</span></div></div></div>';
-    else if (!token()) h += '<div class="note">🔑 로그인하면 점수 · 기록이 서버에 저장돼 기기를 바꿔도 이어져요. <button type="button" class="btn sm pri" id="bnLogin">카카오 로그인</button></div>';
+    else if (!token()) h += '<div class="note">🔑 로그인하면 점수 · 기록이 서버에 저장돼 기기를 바꿔도 이어져요. <button type="button" class="btn sm pri" id="kdBnLogin">카카오 로그인</button></div>';
     h += '<div class="card"><h3>📊 내 꼬들 기록 <small>' + (sv ? '서버 기준' : '이 기기 기준') + '</small></h3><div class="stats4"><div><b>' + st.played + '</b><span>플레이</span></div><div><b>' + (st.played ? Math.round(st.wins / st.played * 100) : 0) + '%</b><span>정답률</span></div><div><b>' + st.streak + '</b><span>연속</span></div><div><b>' + st.best + '</b><span>최고 연속</span></div></div>' +
       '<div class="dist">' + st.dist.map(function (n, i) { return '<div><span style="width:14px">' + (i + 1) + '</span><i style="width:' + Math.max(8, n / mx * 100) + '%">' + n + '</i></div>'; }).join('') + '</div></div>';
     h += '<div class="card"><h3>📜 지난 판 <small>최근 ' + Math.min(RA.length, 50) + '개</small></h3>' + (RA.length ? RA.slice(0, 50).map(function (x) {
@@ -274,13 +307,30 @@
     host.innerHTML = tabs + (view === 'hist' ? histHTML() : gameHTML(view));
     wire(); if (view !== 'hist') { fit(); cellInfo(GM[view]); }
   }
-  function msg(t, bad) { var e = $('msg'); if (e) { e.textContent = t || ''; e.className = 'kmsg' + (bad ? ' bad' : ''); } }
+  function msg(t, bad) { var e = $('kdMsg'); if (e) { e.textContent = t || ''; e.className = 'kmsg' + (bad ? ' bad' : ''); } }
   function shake(m) { var r = $('r' + m.guesses.length); if (r) { r.classList.remove('shake'); void r.offsetWidth; r.classList.add('shake'); } }
+  /** 결과 공유 (꼬맨틀과 같은 방식): 휴대폰은 공유창(카카오톡 선택), PC 는 공유창에 카카오톡이 안 나와서 바로 복사. 공유가 실패하면(취소 제외) 복사, 복사도 안 되면 글을 보여 줌 */
+  var sharing = false;
+  function copyBox(text) {
+    openModal('<h2>결과 복사</h2><p>아래 글을 길게 눌러 복사한 뒤 단톡방에 붙여넣어 주세요.</p><textarea class="cbox" readonly rows="3" style="width:100%">' + esc(text) + '</textarea><div class="btns"><button type="button" class="btn pri" data-x>닫기</button></div>');
+    var t = document.querySelector('#kdModal textarea'); if (t) { t.focus(); t.select(); }
+  }
+  function shareResult(text) {
+    if (sharing) return; sharing = true;
+    var done = function () { sharing = false; };
+    var copy = function () {
+      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { done(); toast('복사했어요. 단톡방에 붙여넣어 주세요'); }, function () { done(); copyBox(text); });
+    };
+    var ua = navigator.userAgent || '', phone = /Android|iPhone|iPad|iPod|Mobi/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    if (phone && navigator.share) { navigator.share({ text: text }).then(done, function (e) { if (e && e.name === 'AbortError') done(); else copy(); }); return; }
+    copy();
+  }
   function wire() {
-    var s = $('share'); if (s) s.onclick = function () { var t = shareText(GM[view]); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('결과를 복사했어요'); }, function () { toast('복사하지 못했어요', true); }); };
-    var p = $('pracNext'); if (p) p.onclick = function () { GM.prac = newGame(true); CUR.prac = ''; render(); };
-    var g = $('goPrac'); if (g) g.onclick = function () { go('prac'); };
-    ['bnLogin', 'resLogin'].forEach(function (id) { var b = $(id); if (b) b.onclick = function (e) { e.preventDefault(); startLogin(); }; });
+    var s = $('kdShare'); if (s) s.onclick = function () { shareResult(shareText(GM[view])); };
+    var p = $('kdNext'); if (p) p.onclick = function () { GM.prac = newGame(true); CUR.prac = ''; render(); };
+    var rt = $('kdRetry'); if (rt) rt.onclick = function () { SV.res = null; srvSubmit(GM[view]); };
+    var g = $('kdGoPrac'); if (g) g.onclick = function () { go('prac'); };
+    ['kdBnLogin', 'kdResLogin'].forEach(function (id) { var b = $(id); if (b) b.onclick = function (e) { e.preventDefault(); startLogin(); }; });
   }
   function go(v) { view = v; if (opt.standalone) { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); }
 
@@ -310,12 +360,13 @@
       if (m.guesses.indexOf(cur) >= 0) { msg('이미 쓴 단어예요', true); return shake(m); }
       if (!m.t0) m.t0 = Date.now();
       m.guesses.push(cur); CUR[view] = '';
-      if (!m.prac && srvOn()) ensureStarted().catch(function () {});   // 첫 추측 때 서버 기록을 시작 (시작 시각 = 첫 추측)
+      if (!m.prac && srvOn()) ensureStarted().catch(startFail);   // 첫 추측 때 서버 기록을 시작 (시작 시각 = 첫 추측) — 실패하면 알리고 다시 시도
       if (cur === m.ans) finish(m, true); else if (m.guesses.length >= TRIES) finish(m, false); else srvSave(m);
       persist(m); return render(true);
     }
-    var add = k; shift = false;
-    if (cur.length + add.length <= LEN) { if (!m.t0 && !m.guesses.length) m.t0 = Date.now(); CUR[view] = cur + add; paintCur(m); }
+    if (view === 'play' && !m.prac && srvOn() && !SV.nonce && !SV.starting) ensureStarted().catch(startFail);   // 첫 글자를 누르는 순간 시작을 시도 (Enter 까지 기다리지 않아 연결 실패를 더 일찍 알게 됨)
+    var add = COMP[k] || k, wasShift = shift; shift = false;
+    if (cur.length + add.length <= LEN) { if (!m.t0 && !m.guesses.length) m.t0 = Date.now(); CUR[view] = cur + add; if (wasShift) render(); else paintCur(m); } else if (wasShift) render();
   }
 
   /* ── 창 ── */
