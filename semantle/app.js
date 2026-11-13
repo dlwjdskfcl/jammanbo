@@ -6,7 +6,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.24.0';
+  var VER = '1.24.1';
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
   function kstDay() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
@@ -466,7 +466,7 @@
   function finish(isWin) { S.L.done = true; S.L.win = isWin; S.L.n = realCount(); S.L.cnt = S.L.g.length; saveLocal(); }
   function win(w) {
     finish(true); S.scrollRes = true;
-    if (!S.xl) { try { JMB_FX.confetti({ x: .5, y: .35, count: 120, duration: 2400 }); } catch (e) {} }   // 엑셀 모드는 조용히
+    if (!S.xl) { try { JMB_FX.confetti({ x: .5, y: .35, count: 120, duration: 2400 }); JMB_FX.celebrate({ kind: 'win' }); } catch (e) {} }   // 엑셀 모드는 조용히
     hap('win');
     if (S.L.rec) submit(true, w); else render();
   }
