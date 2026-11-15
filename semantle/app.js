@@ -6,7 +6,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.28.0';
+  var VER = '1.28.2';
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
   function kstDay() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
@@ -121,7 +121,7 @@
     if (!S.xl || !$('xlRibbon')) return;
     var game = (S.view === 'play' || (S.view === 'prac' && hasPrac())) && S.srv && S.srv.ready && S.L, L = game ? S.L : null;
     if (kodleSub()) { game = false; L = null; }   // 꼬들 화면(탭 · 연습 · 기록 안의 꼬들)에서는 꼬맨틀 입력 · 리본 버튼을 흐리게
-    var gw = $('gw'), open = !!L || S.loading; if (gw) { gw.disabled = !open; if (!open) gw.value = ''; }   // 불러오는 중에도 입력 가능 (대기열)
+    var gw = $('gw'), open = (!!L || S.loading) && !(L && S.optimistic && S.ctx === 'td' && !L.done && !L.prac); if (gw) { gw.disabled = !open; if (!open) gw.value = ''; }   // 불러오는 중에도 입력 가능 (대기열)
     $('xOk').disabled = !open;
     var hb = $('rbHint'), hi = L ? hintInfo() : { off: true };
     hb.disabled = !L || hi.off; $('rbHintT').textContent = L ? hintShort() : '힌트';
@@ -341,6 +341,25 @@
     L.rec = true; S.lastW = '';
   }
 
+  /** (1.28.2) 이 판이 '기록되는 판'인지 서버에 한 번 더 확인 — 서버 확인이 늦거나 실패해서 조용히 기록 안 되는 판으로 풀게 되는 일을 막음.
+   *  서버가 '이미 끝냈다'고 하면 연습, 아니면(진행중 · 기록 없음) 기록 판으로 바로잡음. force = 판이 끝난 뒤(정답 · 포기)에도 확인. 네트워크가 안 되면 그대로 두고 false */
+  function verifyRec(loud, force) {
+    var L = S.L;
+    if (!L || L.prac || S.ctx !== 'td' || !S.nick || (L.done && !force)) return Promise.resolve(false);
+    if (S.verP) return S.verP;
+    S.verP = api('semToday', [token(), 0, 1], 7000).then(function (r) {
+      if (!r || r.loginRequired || r.ready === false) return false;
+      var my = r.my || null;
+      if (S.srv) { S.srv.my = my; if (r.stats) S.srv.stats = r.stats; }
+      S.recVer = true;
+      if (my && my.state === '완료') { if (!L.res) L.rec = false; }
+      else { L.rec = true; if (!L.nonce && !L.done) ensureStart(); }
+      saveLocal();
+      if (loud) toast(L.rec ? '✅ 기록되는 판이에요' : '오늘 기록은 이미 했어요. 연습으로 계속 풀 수 있어요');
+      return true;
+    }, function (e) { if (loud) toast('서버에 연결하지 못했어요. 잠시 뒤 다시 확인해 주세요', true); return false; }).then(function (ok) { S.verP = null; return ok; });
+    return S.verP;
+  }
   function recordable() { return !!(S.L && S.L.rec && !S.L.done); }
   function ensureStart() {
     if (!S.L.rec || S.L.nonce) return Promise.resolve();
@@ -357,6 +376,9 @@
   function guess(raw) {
     if (S.loading || !S.idx) { var qw = normalize(raw); if (qw) { S.queue.push(raw); toast('문제를 불러오는 중이에요. ‘' + qw + '’ 은(는) 곧 계산돼요'); } return; }   // (1.12.0) 불러오는 동안 먼저 입력한 단어는 대기열로
     var w = normalize(raw), inp = $('gw');
+    var rl = S.L && !S.L.prac && !S.L.done && S.ctx === 'td';
+    if (rl && S.optimistic) { toast('기록 확인 중이에요. 잠깐만요…'); return; }   // (1.28.2) 서버 확인이 끝나야 입력
+    if (rl && S.nick && !S.recVer && !S.L.g.length) { verifyRec().then(function () { S.recVer = true; guess(raw); }); return; }   // (1.28.2) 첫 추측 전에 한 번 더 확인 (실패해도 풀 수는 있게 한 번만)
     if (/[A-Za-z0-9]/.test(String(raw || ''))) {   // 영어 · 숫자는 안 됨 (단어 목록이 한글뿐)
       toast('한글로만 입력해 주세요 (영어 · 숫자는 안 돼요)', true); hap('warn');
       if (inp) { inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.select(); }
@@ -466,7 +488,7 @@
     ask('🏳️ 정말 포기할까요?', S.L.rec ? '정답 기록은 <b>0점</b>이고 연속 기록이 끊겨요.' : '오늘 문제를 포기해요.', '포기하기', true).then(function (ok) {
       if (!ok || S.L.done) return;
       finish(false); S.scrollRes = true;
-      if (S.L.rec) submit(false, ''); else render();
+      if (S.L.rec) submit(false, ''); else { render(); verifyRec(true, true).then(function () { if (S.L.rec) submit(false, ''); else render(); }); }   // (1.28.2)
     });
   }
 
@@ -476,7 +498,7 @@
     finish(true); S.scrollRes = true;
     if (!S.xl) { try { JMB_FX.confetti({ x: .5, y: .35, count: 120, duration: 2400 }); JMB_FX.celebrate({ kind: 'win' }); } catch (e) {} }   // 엑셀 모드는 조용히
     hap('win');
-    if (S.L.rec) submit(true, w); else render();
+    if (S.L.rec) submit(true, w); else { render(); verifyRec(true, true).then(function () { if (S.L.rec) submit(true, w); else render(); }); }   // (1.28.2)
   }
   function submit(isWin, word) {
     if (S.busy) return Promise.resolve();   // 두 번 누르거나 겹쳐도 한 번만 보냄
@@ -590,7 +612,7 @@
       '<p>매일 하나의 <b>비밀 단어</b>가 정해져요. 아무 단어나 입력하면 비밀 단어와 <b>뜻이 얼마나 가까운지</b>(유사도)를 알려 줘요. 철자가 아니라 <b>쓰임새·의미</b>가 비슷해야 점수가 높아요.</p>' +
       '<ul><li>유사도는 -100 ~ 100. 높을수록 가까워요.</li><li><b>1000위 안</b>에 들면 순위가 보여요. (1위 = 비밀 단어와 가장 가까운 단어)</li><li>같은 문맥에 같이 나올 법한 단어를 떠올려 보세요. 반대말도 의외로 가까울 수 있어요. ‘사랑’과 ‘증오’는 뜻은 반대지만 같은 문맥에 자주 나와서 비슷해요. ‘밤’처럼 뜻이 여럿인 단어(어두운 밤 · 먹는 밤)는 어느 쪽인지도 생각해 보세요.</li><li>정답을 맞힌 뒤에도 추측을 계속할 수 있어요. 맞힌 뒤에 보이는 <b>가까운 단어 1000개</b>를 살펴보면 유사도를 이해하는 데 도움이 돼요. 정답은 한국 시간 자정에 바뀌고, 어제 정답과 가까운 단어도 볼 수 있어요.</li><li>비밀 단어는 명사 · 동사 · 형용사 등 모든 품사의 <b>기본형</b>이고 <b>두 글자 이상</b>이에요. 예) 행복, 기쁘다, 사랑하다. 추측은 한 글자 단어도 할 수 있어요.</li></ul>' +
       '<h4>🏆 점수와 순위</h4>' +
-      '<ul><li><b>정답 점수</b> = ' + BASE_PTS + ' − 추측 횟수 − 힌트 × ' + HINT_COST + ' (최소 0점) — 힌트를 안 쓰고 적게 추측할수록 높아요. 힌트 하나가 꽤 아파요. 일찍 푼다고 더 받지는 않아요</li><li><b>연속 보너스</b> 이틀째부터 연속 정답 하루마다 +5 (최대 +30)</li><li><b>힌트</b>는 처음엔 못 써요. 추측 <b>5번마다 하나씩</b> 생기고 개수 제한은 없어요. 하나당 −' + HINT_COST + '점. 지금까지 찾은 가장 가까운 단어보다 더 가까운 단어를 알려 줘요</li><li>포기하면 0점 · 연속 기록이 끊겨요</li><li>하루에 한 번만 기록돼요. 정답을 맞힌 뒤에도 계속 연습할 수 있어요.</li><li>순위는 오늘(점수 순) · 이번 주 · 시즌(분기) · 연속 정답 · 레이팅이 있어요. <b>다른 사람에게는 힌트 수와 점수만 보여요</b> (추측 횟수 · 걸린 시간은 나만 봐요).</li>' + (/jammanbo-beta/.test(location.pathname) ? '<li>🟩 <b>꼬들</b> 점수(정답 100 − 추측당 10 · 연속 보너스)도 주간 · 시즌 · 누적 점수에 더해져요. 정답 횟수 · 평균 · 연속 · 레이팅은 꼬맨틀만 셈</li>' : '') + '<li><b>레이팅</b>은 그 날 푼 사람끼리 추측 횟수를 겨루는 점수예요 (처음 1500점). 적게 맞히면 오르고 많이 맞히면 내려가요. 같으면 무승부, 포기는 꼴찌, 힌트 1개는 추측 5번으로 쳐요. 분기마다 새로 시작하고 3일 이상 참여하면 순위에 올라요.</li><li>순위에서 이름을 누르면 그 사람의 기록과 나와의 비교를 볼 수 있어요.</li></ul>' +
+      '<ul><li><b>정답 점수</b> = ' + BASE_PTS + ' − 추측 횟수 − 힌트 × ' + HINT_COST + ' (최소 0점) — 힌트를 안 쓰고 적게 추측할수록 높아요. 힌트 하나가 꽤 아파요. 일찍 푼다고 더 받지는 않아요</li><li><b>연속 보너스</b> 이틀째부터 연속 정답 하루마다 +5 (최대 +30) — <b>11월 16일부터는 없어져요</b> (연속 기록 · 배지는 그대로)</li><li><b>힌트</b>는 처음엔 못 써요. 추측 <b>5번마다 하나씩</b> 생기고 개수 제한은 없어요. 하나당 −' + HINT_COST + '점. 지금까지 찾은 가장 가까운 단어보다 더 가까운 단어를 알려 줘요</li><li>포기하면 0점 · 연속 기록이 끊겨요</li><li>하루에 한 번만 기록돼요. 정답을 맞힌 뒤에도 계속 연습할 수 있어요.</li><li>순위는 오늘(점수 순) · 이번 주 · 시즌(분기) · 연속 정답 · 레이팅이 있어요. <b>다른 사람에게는 힌트 수와 점수만 보여요</b> (추측 횟수 · 걸린 시간은 나만 봐요).</li>' + (/jammanbo-beta/.test(location.pathname) ? '<li>🟩 <b>꼬들</b> 점수(정답 100 − 추측당 10 · 연속 보너스)도 주간 · 시즌 · 누적 점수에 더해져요. 정답 횟수 · 평균 · 연속 · 레이팅은 꼬맨틀만 셈</li>' : '') + '<li><b>레이팅</b>은 그 날 푼 사람끼리 추측 횟수를 겨루는 점수예요 (처음 1500점). 적게 맞히면 오르고 많이 맞히면 내려가요. 같으면 무승부, 포기는 꼴찌, 힌트 1개는 추측 5번으로 쳐요. 분기마다 새로 시작하고 3일 이상 참여하면 순위에 올라요.</li><li>순위에서 이름을 누르면 그 사람의 기록과 나와의 비교를 볼 수 있어요.</li></ul>' +
       '<h4>📚 출처</h4><p class="hint">단어의 의미 거리는 Facebook FastText 한국어 벡터(CC-BY-SA 3.0), 단어 목록 일부는 국립국어원 한국어기초사전(CC BY-SA 2.0 KR)을 바탕으로 했어요.</p>' +
       '<h4>📱 팁</h4><p>한글 단어만 입력할 수 있어요 (영어 · 숫자는 안 돼요). ‘먹었다’ · ‘학교에서’ · ‘웃다’ 처럼 사전에 없는 꼴은 사전에 있는 가까운 꼴(‘먹다’ · ‘학교’ · ‘웃는’)로 바꿔 찾아요. 점수는 컴퓨터가 웹 · 위키백과 글에서 단어가 함께 쓰인 정도를 학습해 계산한 뜻 거리라서, 학습한 글에 따라 편향이 있거나 가끔 이상한 점수가 나올 수 있어요. 웃고 넘겨 주세요 😄</p><p class="hint">단어 벡터 출처: 페이스북(메타) 패스트텍스트, CC BY-SA 3.0 · 게임 방식은 뉴스젤리 꼬맨틀을 참고했어요.</p>' +
       '<div class="btns"><button type="button" class="btn pri" data-x>알겠어요</button></div>');
@@ -666,7 +688,9 @@
   function statusNote() {
     var L = S.L, my = S.srv.my;
     if (!S.nick) return '<div class="note warn">🔒 <b>로그인하고 풀면</b> 정답 기록 · 순위 · 연속 기록이 남아요. 지금은 연습 모드예요.<br><button type="button" class="btn sm" id="login">카카오 로그인</button></div>';
-    if (L.rec || !my) return '';
+    if (L.rec) return '';
+    if (!L.prac && !L.done && S.ctx === 'td' && !(my && my.state === '완료')) return '<div class="note warn">⚠️ <b>이번 판은 아직 기록이 안 돼요</b> — 서버 확인이 끝나지 않았어요. <button type="button" class="btn sm" id="recheck">기록 다시 확인</button></div>';   // (1.28.2)
+    if (!my) return '';
     if (my.state === '완료') return '<div class="note ok">✅ 오늘 기록은 끝났어요' + (my.result === '정답' ? ' (' + my.guesses + '번 · ' + my.points + '점)' : ' (포기)') + '. 아래는 연습이라 점수에 안 들어가요.</div>';
     return '';
   }
@@ -693,7 +717,7 @@
   }
   /** (1.28.0) 챌린지 완료 보너스 안내: 서버 challenge() 의 bp(오늘 보너스) · bon(오늘부터 점수에 들어가나) · bf(시작일) */
   function chalBonusLine(ch, all) {
-    var rule = '<small>완료 보너스 = ' + (ch.bb || CH_BASE) + '점 + 연속일수마다 ' + (ch.bst || 5) + '점 (최대 ' + (ch.bmax || CH_MAXB) + '점)</small>';
+    var rule = ch.bst === 0 ? '<small>완료 보너스 = 매일 ' + (ch.bb || CH_BASE) + '점 (연속일수와 상관없어요)</small>' : '<small>완료 보너스 = ' + (ch.bb || CH_BASE) + '점 + 연속일수마다 ' + (ch.bst || 5) + '점 (최대 ' + (ch.bmax || CH_MAXB) + '점)</small>';
     if (!ch.bon) return '<div class="cbonus"><b>🎁 완료 보너스는 ' + md_(ch.bf || CH_BONUS_FROM) + '부터!</b>' + rule + '</div>';
     return '<div class="cbonus"><b>🎁 ' + (all || ch.tdone ? '오늘 보너스 +' + ch.bp + '점' : '둘 다 끝내면 보너스 +' + ch.bp + '점') + '</b>' + rule + '</div>';
   }
@@ -788,6 +812,8 @@
     ensurePlayFrame();
     $('pTop').innerHTML = S.xl ? (L.prac ? pracCard() : statusNote()) + (L.done ? resultCard() + kodleLink() : '') : (L.prac ? pracCard() : metaCard() + statusNote()) + (L.done ? resultCard() + kodleLink() : '');
     var inp = $('gw'); inp.placeholder = S.xl ? (L.done ? '더 입력해 볼까요?' : '단어 입력') : L.done ? '더 추측해 볼까요? (연습)' : '단어를 입력하세요';
+    var lockIn = !!(S.optimistic && S.ctx === 'td' && !L.done && !L.prac);   // (1.28.2) 서버 확인(기록 여부) 끝나기 전에는 입력 막음
+    if (lockIn) { inp.placeholder = '기록 확인 중…'; } inp.disabled = lockIn;
     var fb = S.fb; $('fb').className = 'fb t' + (fb ? fb.tr : 0);
     $('fb').innerHTML = fb ? (S.xl ? '' : TIER[fb.tr].e + ' ') + '‘' + esc(fb.w) + '’ ' + TIER[fb.tr].t + (fb.r ? ' (' + fb.r + '위)' : '') : (S.xl ? '준비' : '');
     $('pTools').innerHTML = S.xl ? '' : hintBtn() + (L.done ? '' : '<button type="button" class="btn" id="giveBtn">' + xe(L.prac ? '👀 정답 보기' : '🏳️ 포기') + '</button>') + (L.prac && !L.done ? '<button type="button" class="btn" id="pracNext">' + xe('🔁 다른 문제') + '</button>' : '');
@@ -976,7 +1002,7 @@
     h += '<div class="seg sm" id="rkTabs">' + tabs.map(function (t) { return '<button type="button" data-t="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div>' +
       '<div class="card"><h3>' + title + '</h3>' + rkRows(list, tab === 'week' || tab === 'season' ? 'pts' : tab) +
       (tab === 'today' ? '<div class="hint">오늘 꼬맨틀 ' + R.solvedToday + '명 정답 · 오늘 한 사람 ' + (R.today || []).length + '명 · 누적 참여 회원 ' + (typeof R.total === 'number' ? R.total : typeof R.people === 'number' ? R.people : Object.keys(R.people || {}).length) + '명</div>' : '') +
-      (tab === 'chal' ? '<div class="hint">맞히든 포기하든 그날 꼬맨틀과 꼬들을 둘 다 끝내면 하루 완료예요. 완료 보너스는 ' + md_(CH_BONUS_FROM) + '부터 점수에 더해져요 (연속일수에 따라 ' + CH_BASE + '~' + CH_MAXB + '점).</div>' : '') +
+      (tab === 'chal' ? '<div class="hint">맞히든 포기하든 그날 꼬맨틀과 꼬들을 둘 다 끝내면 하루 완료예요. 완료 보너스는 ' + md_(CH_BONUS_FROM) + '부터 점수에 더해져요 (하루 ' + CH_BASE + '점 · 11월 15일까지는 연속일수에 따라 최대 ' + CH_MAXB + '점).</div>' : '') +
       (tab === 'rate' ? '<div class="hint">그 날 푼 사람끼리 추측 횟수를 겨루는 점수 (처음 1500점). 오늘 결과는 잠정이라 사람이 더 풀면 조금 바뀌어요.</div>' : '') + '</div>' + pendingCard(R) +
       '<p class="hint">순위는 1분마다 갱신돼요. 시즌은 분기(1 · 4 · 7 · 10월)마다 새로 시작해요.</p>';
     $('view').innerHTML = h;
@@ -1061,6 +1087,7 @@
       case 'brag': return share(bragText());
       case 'topbtn': return topList();
       case 'retry': return retryPending();
+      case 'recheck': return verifyRec(true).then(function () { render(); });
       case 'goRank': return go('rank');
       case 'pracStart': case 'pracNext': case 'rbNext': return startPrac();
       case 'rbHint': return hint();
@@ -1157,7 +1184,8 @@
     S.nick = nick; prepare(vocab, S.srv);
     var L = lsJSON(LS.play);
     if (!L || L.day !== S.srv.day || L.vh !== S.srv.vh) { L = freshLocal(); L.rec = true; }   // 기록 여부는 서버 확인 뒤 바로잡음 (먼저 풀기 시작해도 서버가 '이미 했어요' 면 연습으로 전환)
-    S.L = L; saveLocal(); S.optimistic = true; S.loading = false;
+    S.L = L; saveLocal(); S.optimistic = true; S.recVer = false; S.loading = false;
+    clearTimeout(startFast._t); startFast._t = setTimeout(function () { if (S.optimistic) { S.optimistic = false; render(); toast('서버 확인이 늦어요. 입력하면 한 번 더 확인할게요', true); } }, 9000);   // (1.28.2) 너무 오래 걸리면 잠금만 풀고, 첫 입력 때 다시 확인
     if (lsGet(LS.help) !== '1') setTimeout(help, 400);
     render(); flushQueue();
     return true;
@@ -1170,6 +1198,7 @@
     if (r.day !== S.srv.day) { dayCacheClear(); return bootFull(); }   // 날짜가 바뀜 → 새 표 (진행 중 추측은 판마다 따로 저장돼 있음)
     var s = S.srv; s.my = r.my; s.kd = r.kd; s.stats = r.stats; s.solvedToday = r.solvedToday; s.yesterday = r.yesterday; s.ch = r.ch; s.me = r.me; s.people = r.people; S.nick = r.me;   // (1.28.0) ch(챌린지 요약)도 합침 — 엣지로 시작하면 빠져서 연속 · 오늘 완료 인원이 안 보이던 것
     var L = S.L, my = r.my;
+    S.recVer = !!my;   // (1.28.2) 내 기록까지 받았을 때만 '확인됨'
     mergeServer(L, my);
     if (!L.done && L.g.length === 0) L.rec = !!(S.nick && my && my.state !== '완료');
     else if (S.nick && my && my.state === '완료' && L.rec && !L.res) L.rec = false;   // 다른 기기에서 이미 기록함
@@ -1206,7 +1235,8 @@
     return api('semToday', [token(), 2, 1]).then(reconcile, function (e) {
       S.optimistic = false;
       if (/로그인이 만료/.test(e.message)) { dayCacheClear(); return renderGate(false); }
-      toast('서버 확인이 늦어요. 지금은 저장된 문제로 풀 수 있어요', true);   // 인터넷이 불안해도 풀 수는 있음 (기록은 연결되면)
+      render();   // (1.28.2) 입력 잠금 풀기
+      toast('서버 확인이 늦어요. 입력하면 한 번 더 확인할게요', true);   // 인터넷이 불안해도 풀 수는 있음 (기록은 연결되면)
     });
   }
   function bootGas() {
@@ -1233,6 +1263,7 @@
       S.L = L;
       var my = srv.my;
       mergeServer(L, my);
+      S.recVer = !!my;
       if (!L.done && L.g.length === 0) L.rec = !!(S.nick && my && my.state !== '완료');
       else if (S.nick && my && my.state === '완료' && L.rec && !L.res) { L.rec = false; }   // 다른 기기에서 이미 기록함
       if (L.rec && my && my.state === '진행중' && !L.nonce) ensureStart();   // 다른 기기/새로고침: 이어 하기 (서버가 확인값을 다시 줌)
