@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.26.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.26.3';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay', LS_THEME = 'tichu_theme', LS_THEME_TIP = 'tichu_theme_tip', LS_BOTLV = 'tichu_botlv', LS_PRACT = 'tichu_practice';
@@ -1661,7 +1661,7 @@
       if (mst && mst.afk) h += '<div class="afkbar">자리 비움 · 자동 진행 중 <button class="btn sm primary" id="gBack">돌아왔어요</button></div>';
       h += '<div class="timerbar"><i id="myTimer" style="width:0"></i></div>';
       h += myBarHTML(g, me, pend, myTurn, top);
-      h += '<div class="handwrap"><div id="recvBar"></div><div class="hand" id="hand"></div></div>';
+      h += '<div class="handwrap"><div id="recvBar"></div><div class="hand" id="hand"></div>' + gverHTML() + '</div>';
     } else {
       // 관전: 누구 시점으로 볼지 고르는 큰 버튼 4개 (테이블 자리를 눌러도 됨) + 패 보기 방이면 그 사람 패 + 봇 자리 이어받기
       var takes = r.status === 'play' && !r.solo && !r.opt.peek ? r.seats.map(function (st, s) {
@@ -1672,7 +1672,7 @@
         (peek ? '<div class="handwrap peek"><div class="hand" id="peekHand"></div></div>' : '') +
         '<div class="sline">👀 관전 중 · ' + esc(r.name) + (r.status === 'play' ? '' : ' (게임 끝)') +
           (peek ? ' <button class="btn sm" id="gPeekAll">🃏 4명 한눈에</button>' : r.opt.peek ? '' : ' <span class="small">· 자리를 누르면 그 사람 시점</span>') + '</div>' +
-        watchersHTML(r) + (takes ? '<div class="takes">' + takes + '</div>' : '') + '</div>';
+        watchersHTML(r) + (takes ? '<div class="takes">' + takes + '</div>' : '') + gverHTML() + '</div>';
     }
     h += '</div>';
     app.innerHTML = h;
@@ -1760,6 +1760,7 @@
     if (op && op.k === 'play' && op.c && me >= 0) { var v2 = TE.sumPoints(op.c.c); by[me] += v2; tot += v2; }
     return { by: by, tot: tot };
   }
+  function gverHTML() { return '<div class="gver">화면 v' + APP_VER + '</div>'; }   // 게임 화면 맨 아래 패치 버전
   function ptsFmt(n) { return (n > 0 ? '+' : '') + n + '점'; }
   // 바닥(낸 카드 칸). isTurn = 지금 이 사람 차례 → 금색 테두리 + '차례' 표시. pts = 이 자리가 이 트릭에 낸 카드 점수
   function frontHTML(g, s, p, st, isTop, isTurn, pts) {
@@ -1800,7 +1801,7 @@
       var tp = g.trick.plays[g.trick.plays.length - 1], tt = team(tp.s) ? 'B' : 'A';
       if (S.optim && S.optim.k === 'play' && S.optim.c && me >= 0) { tp = { s: me, c: S.optim.c }; tt = team(me) ? 'B' : 'A'; }
       h += '<div class="topwho ' + tt + '"><span class="dot"></span>' + (tp.s === me ? '내가 낸 카드' : esc(seatName(tp.s))) + ' · ' + esc(TE.comboName(tp.c)) + '</div>';
-      h += '<div class="floorpts' + (fp.tot < 0 ? ' neg' : '') + '">바닥 ' + fp.tot + '점</div>';
+      h += '<div class="floorpts' + (fp.tot < 0 ? ' neg' : '') + '" title="이번 라운드에서 아직 점수로 환산되지 않은 카드점수 — 이 트릭을 이기면 가져가요">바닥 카드점수 ' + fp.tot + '점 · 미확정</div>';
     }
     return h;
   }
