@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.26.1';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.26.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay', LS_THEME = 'tichu_theme', LS_THEME_TIP = 'tichu_theme_tip', LS_BOTLV = 'tichu_botlv', LS_PRACT = 'tichu_practice';
@@ -1644,14 +1644,14 @@
     // 테이블
     h += '<div class="felt">';
     S.topSeat = top && (gt.phase === 'play' || gt.phase === 'dragon') ? top.s : -1;
-    var fronts = ['', '', '', ''];
+    var fronts = ['', '', '', ''], fp = floorPts(gt, op, me);
     for (var s = 0; s < 4; s++) {
       var p = pos(s, view), st = r.seats[s];
       if (p !== 0) h += seatHTML(g, s, p, st, pend);
-      fronts[p] = frontHTML(gt, s, p, ts[s], top && top.s === s, pend.indexOf(s) >= 0 && !closing && (g.phase === 'play' || g.phase === 'dragon') && !(op && s === me));
+      fronts[p] = frontHTML(gt, s, p, ts[s], top && top.s === s, pend.indexOf(s) >= 0 && !closing && (g.phase === 'play' || g.phase === 'dragon') && !(op && s === me), fp.by[s]);
     }
     // 낸 카드 판: 위(맞은편) · 왼쪽 · 오른쪽 · 가운데 안내 · 아래(나) — 네 사람 카드가 서로 겹치지 않게 칸을 나눔
-    h += '<div class="board">' + fronts[2] + fronts[3] + fronts[1] + '<div class="center">' + centerHTML(g, me, pend) + '</div>' + fronts[0] + '</div>';
+    h += '<div class="board">' + fronts[2] + fronts[3] + fronts[1] + '<div class="center">' + centerHTML(g, me, pend, fp) + '</div>' + fronts[0] + '</div>';
     h += panelHTML(g, me);
     h += '</div>';
 
@@ -1753,8 +1753,16 @@
       '<div class="nm ' + (t === 'A' ? 'tA' : 'tB') + '">' + esc(st ? st.name : '') + '</div><div class="info">' + tags + '</div></div>';
   }
   function ringSVG() { return '<svg class="ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" stroke-dasharray="113.1" stroke-dashoffset="0" data-ring="1"/></svg>'; }
-  // 바닥(낸 카드 칸). isTurn = 지금 이 사람 차례 → 금색 테두리 + '차례' 표시
-  function frontHTML(g, s, p, st, isTop, isTurn) {
+  // 현재 트릭 바닥의 카드 점수 (공개된 카드라 합계는 숨길 게 없음). 자리별 = 그 사람이 이 트릭에 낸 카드 점수 전부
+  function floorPts(g, op, me) {
+    var by = [0, 0, 0, 0], tot = 0;
+    g.trick.plays.forEach(function (p) { var v = TE.sumPoints(p.c.c); by[p.s] += v; tot += v; });
+    if (op && op.k === 'play' && op.c && me >= 0) { var v2 = TE.sumPoints(op.c.c); by[me] += v2; tot += v2; }
+    return { by: by, tot: tot };
+  }
+  function ptsFmt(n) { return (n > 0 ? '+' : '') + n + '점'; }
+  // 바닥(낸 카드 칸). isTurn = 지금 이 사람 차례 → 금색 테두리 + '차례' 표시. pts = 이 자리가 이 트릭에 낸 카드 점수
+  function frontHTML(g, s, p, st, isTop, isTurn, pts) {
     var mine = p === 0 && myView() >= 0;   // 관전자에게 아래 자리는 '나'가 아님
     var who = mine ? '나' : esc(seatName(s)), tc = team(s) ? 'B' : 'A', tn = isTurn ? ' turn' : '';
     var turnLbl = isTurn ? '<span class="turnlbl">' + (g.phase === 'dragon' ? '🐉 ' : '⏳ ') + (mine ? '내 차례' : who + ' 차례') + '</span>' : '';
@@ -1766,9 +1774,9 @@
     // 방금 낸 카드: 한 장씩 그 사람 자리 쪽에서 날아옴 (CSS .fly — --i 순서, 폭탄은 .bomb 쾅)
     var cards = fl ? '<div class="cards ' + size + '">' + st.play.c.map(function (c, i) { return cardHTML(c, '', size).replace('class="card', 'style="--i:' + i + '" class="card'); }).join('') + '</div>' : cardsHTML(st.play.c, size);
     if (fl) fl += ' fly' + (S.shake && isTop ? ' bomb' : '');
-    return '<div class="front p' + p + ' t' + tc + (isTop ? ' top' : ' old') + fl + tn + '"' + delay + '>' + cards + '<span class="lbl">' + (isTop ? '👑 ' : '') + who + ' · ' + esc(TE.comboName(st.play)) + '</span>' + turnLbl + '</div>';
+    return '<div class="front p' + p + ' t' + tc + (isTop ? ' top' : ' old') + fl + tn + '"' + delay + '>' + cards + '<span class="lbl">' + (isTop ? '👑 ' : '') + who + ' · ' + esc(TE.comboName(st.play)) + '</span>' + (pts ? '<span class="fpts' + (pts < 0 ? ' neg' : '') + '">' + ptsFmt(pts) + '</span>' : '') + turnLbl + '</div>';
   }
-  function centerHTML(g, me, pend) {
+  function centerHTML(g, me, pend, fp) {
     var h = '', msg = '', isMe = false;
     if (g.phase === 'grand') msg = '라지 티츄 결정 중 · ' + g.grand.filter(function (x) { return x !== null; }).length + '/4';
     else if (g.phase === 'exchange') msg = '카드 교환 중 · ' + g.exDone.filter(Boolean).length + '/4';
@@ -1792,6 +1800,7 @@
       var tp = g.trick.plays[g.trick.plays.length - 1], tt = team(tp.s) ? 'B' : 'A';
       if (S.optim && S.optim.k === 'play' && S.optim.c && me >= 0) { tp = { s: me, c: S.optim.c }; tt = team(me) ? 'B' : 'A'; }
       h += '<div class="topwho ' + tt + '"><span class="dot"></span>' + (tp.s === me ? '내가 낸 카드' : esc(seatName(tp.s))) + ' · ' + esc(TE.comboName(tp.c)) + '</div>';
+      h += '<div class="floorpts' + (fp.tot < 0 ? ' neg' : '') + '">바닥 ' + fp.tot + '점</div>';
     }
     return h;
   }
