@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.26.3';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.27.0';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay', LS_THEME = 'tichu_theme', LS_THEME_TIP = 'tichu_theme_tip', LS_BOTLV = 'tichu_botlv', LS_PRACT = 'tichu_practice';
@@ -1629,14 +1629,19 @@
     if (op && me >= 0 && op.k === 'pass') { ts[me] = { pass: 1 }; S.flash[me] = 0; }
     var myTurn = me >= 0 && g.phase === 'play' && g.turn === me;
     var scoreUs = g.scores[myTeam], scoreThem = g.scores[1 - myTeam];
-    var nmUs = [view, (view + 2) % 4].map(seatName).join('·'), nmThem = [(view + 1) % 4, (view + 3) % 4].map(seatName).join('·');
+    // 이번 라운드에 먹었지만 아직 점수로 환산 안 된 카드점수 (서버 v1.17.8+ 가 g.ptsLive 로 알려 줌)
+    var live = !!g.ptsLive && (g.phase === 'play' || g.phase === 'dragon'), rp = g.pts || [0, 0, 0, 0];
+    var usS = [view, (view + 2) % 4], thS = [(view + 1) % 4, (view + 3) % 4];
+    var nmP = function (x) { return live ? seatName(x).slice(0, 3) + ' ' + rp[x] : seatName(x); };   // 점수를 붙일 땐 이름을 3글자까지만 (줄이 좁아 파트너 점수가 잘리지 않게)
+    var nmUs = usS.map(nmP).join('·'), nmThem = thS.map(nmP).join('·');
+    var rpUs = live ? '<i class="rp" title="이번 라운드에 먹었지만 아직 점수로 환산 안 된 카드점수">' + plusN(rp[usS[0]] + rp[usS[1]]) + '</i>' : '', rpThem = live ? '<i class="rp" title="이번 라운드에 먹었지만 아직 점수로 환산 안 된 카드점수">' + plusN(rp[thS[0]] + rp[thS[1]]) + '</i>' : '';
 
     var h = '<div class="game">';
     // 상단: 점수
     h += '<div class="gbar"><button class="iconbtn" id="gMenu" aria-label="메뉴">≡</button>' +
-      '<div class="score"><div class="tm ' + (myTeam ? 'tB' : 'tA') + '"><span>' + scoreUs + '</span><small>' + (me >= 0 ? '우리 · ' : '') + esc(nmUs) + '</small></div>' +
+      '<div class="score"><div class="tm ' + (myTeam ? 'tB' : 'tA') + (live ? ' live' : '') + '"><span>' + scoreUs + rpUs + '</span><small>' + (me >= 0 && !live ? '우리 · ' : '') + esc(nmUs) + '</small></div>' +
       '<div class="vs">' + g.round + 'R<small>' + (timeOf(r.opt) ? '<span id="gClock" title="타임 어택 남은 시간">⏱ ' + clockText(r) + '</span>' : '/' + g.target) + '</small></div>' +
-      '<div class="tm ' + (myTeam ? 'tA' : 'tB') + '"><span>' + scoreThem + '</span><small>' + (me >= 0 ? '상대 · ' : '') + esc(nmThem) + '</small></div></div>' +
+      '<div class="tm ' + (myTeam ? 'tA' : 'tB') + (live ? ' live' : '') + '"><span>' + scoreThem + rpThem + '</span><small>' + (me >= 0 && !live ? '상대 · ' : '') + esc(nmThem) + '</small></div></div>' +
       '<button class="iconbtn" id="gSheet" aria-label="점수표">📋</button>' +
       '<button class="iconbtn" id="gPeople" aria-label="참가자·관전자">👥' + ((r.watchers || []).length ? '<span class="cnt">' + r.watchers.length + '</span>' : '') + '</button>' +
       '<button class="iconbtn" id="gChat" aria-label="채팅">💬' + (S.unread ? '<span class="badge-dot">' + S.unread + '</span>' : '') + '</button></div>';
@@ -1761,6 +1766,7 @@
     return { by: by, tot: tot };
   }
   function gverHTML() { return '<div class="gver">화면 v' + APP_VER + '</div>'; }   // 게임 화면 맨 아래 패치 버전
+  function plusN(n) { return n > 0 ? '+' + n : String(n); }
   function ptsFmt(n) { return (n > 0 ? '+' : '') + n + '점'; }
   // 바닥(낸 카드 칸). isTurn = 지금 이 사람 차례 → 금색 테두리 + '차례' 표시. pts = 이 자리가 이 트릭에 낸 카드 점수
   function frontHTML(g, s, p, st, isTop, isTurn, pts) {
