@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.26.0';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.26.1';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay', LS_THEME = 'tichu_theme', LS_THEME_TIP = 'tichu_theme_tip', LS_BOTLV = 'tichu_botlv', LS_PRACT = 'tichu_practice';
@@ -1280,7 +1280,8 @@
       // 3등이 마지막 패를 내고 라운드가 끝났으면: 그 패를 테이블에 잠깐 보여 준 뒤 결과 화면 (2026-11-23 제보)
       var endKey = key + ':' + g.round;
       S.holdMs = 0;
-      if (S.lastSeq && (g.phase === 'roundEnd' || g.phase === 'gameEnd') && S.resultShown !== endKey && evs.some(function (e) { return e.k === 'out' && e.place === 3; })) {
+      // 내가 꼴찌(4등)일 때만 — 1·2등으로 나간 사람은 보여 줄 필요 없음 (2026-11-24 제보)
+      if (S.lastSeq && me >= 0 && g.out.indexOf(me) < 0 && (g.phase === 'roundEnd' || g.phase === 'gameEnd') && S.resultShown !== endKey && evs.some(function (e) { return e.k === 'out' && e.place === 3; })) {
         for (var li = g.log.length - 1; li >= 0 && g.log[li].k !== 'play'; li--);
         if (li >= 0) { S.holdMs = END_HOLD_MS; S.endHold = { n: g.log[li].n, until: Date.now() + END_HOLD_MS }; setTimeout(render, END_HOLD_MS + 50); }
       }
