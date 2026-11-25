@@ -1,4 +1,4 @@
-/* 잠만보 마이티 — AI v1.0.0 (DOM 없음 · 브라우저/Node 공용)
+/* 잠만보 마이티 — AI v1.0.2 (DOM 없음 · 브라우저/Node 공용)
  *   MightyAI.choose(st, seat, level, rnd) → 그 자리의 다음 동작 {t:..., why:'이유'}   level 1 쉬움 · 2 보통 · 3 고수
  * AI 는 자기 손패와 공개 정보(나온 카드 · 무늬가 떨어진 자리 · 조커콜 반응)만 봄.
  *   쉬움 = 규칙 기반 + 가끔 아무 카드, 공약 소극적   보통 = 규칙 기반(역할 추론 · 기루다 빼기 · 점수 몰아주기)
@@ -269,6 +269,7 @@
       return low('우리 편이 이기고 있어 낮은 카드를 내요');
     }
     var cheap = winners.filter(function (c) { return c !== x.m && c !== JOKER; });
+    if (enemyAfter && trickPts === 0 && g !== NT && st.leadSuit !== g) cheap = cheap.filter(function (c) { return suitOf(c) !== g; });   // 점수 카드가 없는 트릭은 기루다로 자르지 않음 (뒤에 상대가 남았을 때)
     if (cheap.length) {
       if (!enemyAfter) {
         var pw = cheap.filter(isPoint);
