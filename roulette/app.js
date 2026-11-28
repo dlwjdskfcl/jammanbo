@@ -10,7 +10,8 @@
   if (!E) return;
   var W = E.W, R = E.R;
   var $ = function (id) { return document.getElementById(id); };
-  var VER = '2.6.0';
+  var VER = '2.6.1';
+  if (window.JMB_GVER) JMB_GVER(VER);
 
   /* ---------- 저장 ---------- */
   var KEY = { names: 'jmb_rl_names', recent: 'jmb_rl_recent', opt: 'jmb_rl_opt' };

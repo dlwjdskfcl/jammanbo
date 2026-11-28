@@ -8,7 +8,8 @@
   var C = window.TimerClock;
   if (!C) return;
   var $ = function (id) { return document.getElementById(id); };
-  var VER = '1.0.1';
+  var VER = '1.0.2';
+  if (window.JMB_GVER) JMB_GVER(VER);
   var FX = window.JMB_FX || null;
   var now = function () { return Date.now(); };
 

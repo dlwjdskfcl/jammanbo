@@ -4,7 +4,8 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.28.1';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.28.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var MIN_SV = '1.17.8';    // 이 화면이 쓰는 서버 기능의 최소 버전(g.ptsLive = 서버 1.17.8+). 이보다 낮은 서버일 때만 '새로 배포 필요' 경고 — 화면(1.x)과 서버(1.x)는 번호 체계가 달라 서로 같게 맞추지 않음
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
   var LS_TOKEN = 'tichu_token' + ENV_SFX, LS_NOAUTO = 'tichu_noauto' + ENV_SFX, LS_SOUND = 'tichu_sound', LS_VOICE = 'tichu_voice', LS_SEEN = 'tichu_seen_rules', LS_BOTD = 'tichu_botdelay', LS_THEME = 'tichu_theme', LS_THEME_TIP = 'tichu_theme_tip', LS_BOTLV = 'tichu_botlv', LS_PRACT = 'tichu_practice';
@@ -498,6 +499,7 @@
       '<button class="btn primary block" type="submit" id="lbtn">로그인</button></form></details>' +
       '</div>' +
       '<a class="small" href="' + ROOT + '">← 잠만보로 돌아가기</a>' +
+      gverHTML(1) +
       '</div>';
     var kg = $('#kGo'); if (kg) kg.onclick = function () { loginKakao(kg); };
     var ks2 = $('#kStart'); if (ks2) ks2.onclick = startKakao;
@@ -570,7 +572,7 @@
     else if (r === 'rank') body = rankBody();
     else if (r === 'me') body = recBody();
     else body = rulesBody();
-    app.innerHTML = '<div class="shell">' + header() + '<div class="content">' + body + '</div>' + tabbar(r) + '</div>';
+    app.innerHTML = '<div class="shell">' + header() + '<div class="content">' + body + gverHTML(1) + '</div>' + tabbar(r) + '</div>';
     bindShell();
     // (1.29.1) 아르케온 '곧 출시예정' 홍보(../promo.js) — 방 목록에서만. 다른 탭 · 방 · 게임 화면에서는 안 뜸
     if (window.JMB_PROMO) { if (r === 'lobby') JMB_PROMO.show('lobby', document.querySelector('.content')); else JMB_PROMO.hide(); }
@@ -680,8 +682,10 @@
     if (a) a.onchange = function () { S.sound = a.checked; lsSet(LS_SOUND, S.sound ? '1' : '0'); if (S.sound) sfx('turn'); };
     if (b) b.onchange = function () { S.voice = b.checked; lsSet(LS_VOICE, S.voice ? '1' : '0'); if (S.voice) say('음성 안내를 켰어요'); else try { speechSynthesis.cancel(); } catch (e) {} };
   }
+  function svLess(a, b) { a = String(a).split('.'); b = String(b).split('.'); for (var i = 0; i < 3; i++) { var x = +a[i] || 0, y = +b[i] || 0; if (x !== y) return x < y; } return false; }
+  function svWarn() { return S.sv === 'old' || !!(S.sv && svLess(S.sv, MIN_SV)); }   // 서버가 아직 모를 때(확인 중)는 경고 안 함
   function verLine() {
-    return '<div class="verline">화면 v' + APP_VER + ' · 서버 ' + (S.sv === 'old' ? '1.4 이전' : S.sv ? 'v' + esc(S.sv) : '확인 중') + (S.sv && S.sv.split('.').slice(0, 2).join('.') !== APP_VER.split('.').slice(0, 2).join('.') ?' <span class="warn">' + (S.sv === 'old' ? '서버 새로 배포 필요' : '버전 다름') + '</span>' : '') + (CFG.env && CFG.env !== 'prod' ? ' · ' + esc(CFG.env) : '') + '</div>';
+    return '<div class="verline">화면 v' + APP_VER + ' · 서버 ' + (S.sv === 'old' ? '1.4 이전' : S.sv ? 'v' + esc(S.sv) : '확인 중') + (svWarn() ? ' <span class="warn">서버 새로 배포 필요</span>' : '') + (CFG.env && CFG.env !== 'prod' ? ' · ' + esc(CFG.env) : '') + '</div>';
   }
 
   function loadLobby(manual) {
@@ -1400,7 +1404,7 @@
       '<div style="display:flex;gap:8px"><button class="btn block" id="wInvite">🔗 초대 링크 복사</button>' + (me >= 0 ? '<button class="btn danger block" id="wLeave">나가기</button>' : '') + '</div>' +
       '<div class="sec-title">채팅</div>' + adHTML('ad-chat') + '<div class="chatlist" id="wChatList">' + chatItems(r.chat.slice(-8)) + '</div>' +
       '<form class="chatform" id="wChatForm"><input class="input" id="wMsg" maxlength="100" placeholder="메시지" autocomplete="off"><button class="btn" type="submit">보내기</button></form>' +
-      '</div></div>';
+      gverHTML(1) + '</div></div>';
     var focused = document.activeElement && document.activeElement.id === 'wMsg', val = focused ? $('#wMsg').value : '';
     app.innerHTML = h;
     if (focused) { var mi = $('#wMsg'); mi.value = val; mi.focus(); }
@@ -1772,7 +1776,11 @@
     if (op && op.k === 'play' && op.c && me >= 0) { var v2 = TE.sumPoints(op.c.c); by[me] += v2; tot += v2; }
     return { by: by, tot: tot };
   }
-  function gverHTML() { return '<div class="gver">화면 v' + APP_VER + '</div>'; }   // 게임 화면 맨 아래 패치 버전
+  // 맨 아래 패치 버전 — 게임 화면은 작은 한 줄(자리가 빡빡함), 로그인 · 로비 · 랭킹 · 대기실(pg)은 서버 버전까지
+  function gverHTML(pg) {
+    if (!pg) return '<div class="gver">화면 v' + APP_VER + '</div>';
+    return '<div class="gver pg">티츄 · 화면 v' + APP_VER + (S.sv && S.sv !== 'old' ? ' · 서버 v' + esc(S.sv) : '') + (svWarn() ? ' <span class="warn">서버 새로 배포 필요</span>' : '') + '</div>';
+  }
   function plusN(n) { return n >= 0 ? '+' + n : String(n); }
   function ptsFmt(n) { return (n > 0 ? '+' : '') + n + '점'; }
   // 바닥(낸 카드 칸). isTurn = 지금 이 사람 차례 → 금색 테두리 + '차례' 표시. pts = 이 자리가 이 트릭에 낸 카드 점수

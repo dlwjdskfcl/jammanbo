@@ -11,7 +11,8 @@
  */
 (function () {
   'use strict';
-  var VER = '2.3.1';
+  var VER = '2.3.2';
+  if (window.JMB_GVER) JMB_GVER(VER, '#sbody');
   var C = window.MAPCORE;
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';

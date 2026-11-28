@@ -59,7 +59,7 @@ kbd{font:600 11px var(--sans);border:1px solid var(--line);border-bottom-width:2
 .pads{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
 @media (min-width:560px){.pads{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}}
 .pad{--c:var(--c-quiz);--d:1s;position:relative;overflow:hidden;border:0;border-radius:18px;min-height:92px;padding:12px 8px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  background:linear-gradient(160deg,color-mix(in srgb,var(--c) 14%,var(--surface)),color-mix(in srgb,var(--c) 24%,var(--surface)));
+  background:color-mix(in srgb,var(--c) 16%,var(--surface));
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 22%,transparent),0 2px 0 color-mix(in srgb,var(--c) 30%,transparent);
   transition:transform .07s,box-shadow .15s;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .pad i{font-style:normal;font-size:30px;line-height:1.1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.12))}
@@ -94,7 +94,7 @@ kbd{font:600 11px var(--sans);border:1px solid var(--line);border-bottom-width:2
 .bg b{font-size:15px;font-weight:800;letter-spacing:-.03em}
 .bg small{font-size:12px;color:var(--muted);font-weight:600;line-height:1.35}
 .bg .key{position:absolute;right:10px;top:8px;font-size:10.5px;font-weight:800;color:var(--muted);opacity:.7}
-.bg.on{background:linear-gradient(150deg,color-mix(in srgb,var(--c) 85%,#fff),var(--c));color:#1b1200;box-shadow:0 8px 22px color-mix(in srgb,var(--c) 40%,transparent)}
+.bg.on{background:var(--c);color:#1b1200}
 .bg.on small{color:rgba(27,18,0,.7)}
 .bg .eq{position:absolute;right:12px;bottom:12px;display:none;gap:2px;align-items:flex-end;height:16px}
 .bg.on .eq{display:flex}

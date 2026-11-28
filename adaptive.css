@@ -19,6 +19,8 @@ button,a,select,summary,label,[role=button]{-webkit-tap-highlight-color:transpar
 @media (min-width:900px) and (pointer:fine){
   html[data-game=timer] body,html[data-game=sound] body,html[data-game=aging] body{margin-left:auto;margin-right:auto}
 }
+/* 맨 아래 '화면 vX.Y.Z' (adaptive.js JMB_GVER) — 낮은 우선순위(:where)라 페이지 CSS 가 먼저 이김 */
+:where(.gver){display:block;text-align:center;font-size:12px;line-height:1.2;color:var(--muted,#6b7684);font-variant-numeric:tabular-nums;padding:14px 12px calc(18px + env(safe-area-inset-bottom));user-select:none}
 /* 가로로 눕힌 폰: 세로 공간이 모자라니 위아래 여백을 줄임 */
 @media (pointer:coarse) and (orientation:landscape) and (max-height:480px){
   html[data-game=timer] body,html[data-game=sound] body,html[data-game=aging] body,html[data-game=semantle] body{padding-top:0;padding-bottom:0}

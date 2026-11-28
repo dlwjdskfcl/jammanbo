@@ -7,7 +7,7 @@
 /* 1. 색·글꼴 ------------------------------------------------------------- */
 :root{
   --bg:#f5f6f8; --surface:#ffffff; --surface2:#f2f4f7; --line:#e5e8ee; --frame:#e5e8ee;
-  --ink:#191f28; --ink2:#4e5968; --muted:#8b95a1;
+  --ink:#191f28; --ink2:#4e5968; --muted:#6b7684;
   --accent:#3b5bdb; --accent-soft:#edf1ff; --accent-ink:#ffffff; --brand:#1e2a5a;
   --blue:#3b5bdb; --yellow:#f59f00;
   --good:#12b76a; --good-soft:#e7f8ef; --warn:#d97706; --warn-soft:#fff5e5; --bad:#e5484d; --bad-soft:#fdeced;
@@ -43,6 +43,13 @@ header.top{position:sticky;top:0;z-index:20;background:var(--surface);border-bot
 .brand{display:flex;flex-direction:column;justify-content:center;font-family:var(--sans);font-weight:800;font-size:19px;letter-spacing:-.03em;color:var(--ink);text-shadow:none;line-height:1.15;min-width:0;position:relative;padding-left:40px;min-height:34px}
 .brand::before{content:"";position:absolute;left:0;top:50%;width:32px;height:32px;margin-top:-16px;border-radius:9px;background:var(--brand) url(icon-192.png) center/cover no-repeat}
 .brand small{display:block;margin:2px 0 0;font-family:var(--sans);font-size:11.5px;font-weight:500;color:var(--muted);text-shadow:none;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 게임 선 아이콘(games.js) — 홈 카드 · 미니게임 메뉴 */
+.jmb-gi{color:var(--ink2);flex:none}
+/* 맨 아래 버전 표시 (auth.js setupGver) — 모바일은 아래 고정 탭 바에 가리지 않게 그만큼 띄움 */
+#jmbGver{display:block;text-align:center;font-size:12px;line-height:1.3;color:var(--muted);padding:4px 12px 20px;font-variant-numeric:tabular-nums;user-select:none}
+@media (max-width:720px){#jmbGver{margin-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}}
+/* 좁은 폰(320~360px)에서 시간이 '…' 로 잘리던 것: 두 줄로 내려 씀 */
+@media (max-width:380px){.brand small{white-space:normal;word-break:keep-all;line-height:1.25}}
 .top-row .btn,.top-row .btn.sm{background:transparent;color:var(--ink);border:1px solid transparent;box-shadow:none;min-height:38px;height:38px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:none}
 .top-row .btn:hover{background:var(--surface2)}
 .top-row .btn:active{transform:none;background:var(--line)}
@@ -102,9 +109,8 @@ header.top{position:sticky;top:0;z-index:20;background:var(--surface);border-bot
 .card{padding:16px 18px;margin-bottom:10px}
 .tiles{gap:10px;margin-top:12px}
 .tile{padding:16px 16px 14px;position:relative;overflow:hidden}
-.tile::before{content:"";position:absolute;left:16px;top:18px;width:8px;height:8px;border-radius:50%;background:var(--accent);bottom:auto}
-.tiles .tile:nth-child(2)::before{background:#7c5cff}.tiles .tile:nth-child(3)::before{background:var(--yellow)}.tiles .tile:nth-child(4)::before{background:var(--bad)}
-.tile .k{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink2);padding-left:14px}
+.tile::before{display:none}
+.tile .k{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink2)}
 .tile .v{font-family:var(--sans);font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.15;margin-top:6px}
 .tile .v small{font-size:14px;font-weight:600;color:var(--muted);margin-left:3px}
 h2{font-family:var(--sans);font-size:18px;font-weight:800;letter-spacing:-.02em;margin:30px 2px 12px;gap:8px}
@@ -113,15 +119,11 @@ h2 .sub{font-size:13px;font-weight:500;color:var(--muted)}
 .chart h3,.modal h3,.notice h3{font-family:var(--sans);font-weight:700;letter-spacing:-.02em}
 .month{font-size:13px;font-weight:700;color:var(--muted);margin:24px 4px 8px;padding:0;border:0;letter-spacing:0}
 /* 오늘의 추천 */
-.card.today{border:0;border-left:0;padding:16px 18px;margin-top:14px;color:#fff;
-  background:linear-gradient(135deg,#2b3a8f 0%,#3b5bdb 55%,#5c7cfa 100%);box-shadow:0 6px 18px rgba(59,91,219,.25)}
-.card.today .today-k{color:rgba(255,255,255,.75);font-size:12px;font-weight:600;letter-spacing:.02em}
-.card.today .today-k span{color:#fff;font-weight:700;background:rgba(255,255,255,.18);padding:1px 8px;border-radius:999px;margin-left:6px}
-.card.today .today-t{color:#fff;font-size:15.5px;margin-top:6px}
-.card.today .today-t b{color:#fff}
-@media (prefers-color-scheme: dark){.card.today{background:linear-gradient(135deg,#1e2763 0%,#2f46a8 60%,#4560d6 100%);box-shadow:none}}
-/* 오늘의 추천 안 실시간 검색어: 파란 바탕이라 강조색을 밝게 */
-.card.today .trend-n.top{color:#ffd84d}
+.card.today{border-left:1px solid var(--line);padding:16px 18px;margin-top:14px;color:var(--ink);background:var(--surface)}
+.card.today .today-k{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.02em}
+.card.today .today-k span{color:var(--ink2);font-weight:600;background:var(--surface2);padding:1px 8px;border-radius:999px;margin-left:6px}
+.card.today .today-t{color:var(--ink);font-size:15.5px;margin-top:6px}
+.card.today .today-t b{color:var(--ink)}
 
 /* 6. 목록·표·차트 --------------------------------------------------------- */
 .list{overflow:hidden}
@@ -204,7 +206,7 @@ div[style*="#e11d48"]{bottom:calc(var(--nav-h) + 10px + env(safe-area-inset-bott
 .card.monthly{padding:0;overflow:hidden}
 .monthly .tile,.modal .tile{box-shadow:none;background:var(--surface2);border-color:transparent}
 .monthly .mbox{background:transparent}
-.monthly .mh{background:linear-gradient(135deg,#1e2a5a,#3b5bdb);border:0;padding:18px}
+.monthly .mh{background:#1e2a5a;border:0;padding:18px}
 .monthly .mt{font-family:var(--sans);font-weight:800;text-shadow:none;letter-spacing:-.02em}
 .mbox,.review,.reply,.lvbox{border:1px solid var(--line);border-style:solid;border-radius:12px;background:var(--surface2)}
 .mr,.review .rv{border-bottom:1px solid var(--line)}
@@ -218,11 +220,10 @@ div[style*="#e11d48"]{bottom:calc(var(--nav-h) + 10px + env(safe-area-inset-bott
 .empty{font-weight:500}
 /* 티츄 카드 (extras.js) */
 .jmb-tichu-card{padding:14px 16px;gap:14px}
-.jmb-tichu-card .ic{width:44px;height:44px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;background:linear-gradient(135deg,#fff4e6,#ffe8cc);flex:none}
+.jmb-tichu-card .ic{width:44px;height:44px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;background:var(--surface2);flex:none}
 .jmb-tichu-card .tx b{font-size:15.5px;letter-spacing:-.02em}
 .jmb-tichu-card .tx small{color:var(--muted);opacity:1;font-size:13px;margin-top:2px}
 .jmb-tichu-card .go{color:var(--muted);font-size:20px}
-@media (prefers-color-scheme: dark){.jmb-tichu-card .ic{background:linear-gradient(135deg,#3a2a12,#4a3315)}}
 /* 계정 모듈 */
 .jmb-chip.on{background:var(--accent);border-color:var(--accent)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
@@ -234,14 +235,14 @@ button,.btn,.tab,.row,.card[data-mem],.card[data-game],.mcard,.chip,summary{-web
 /* 손가락으로 누르는 화면(터치): 누르기 쉬운 크기 · 아이폰 입력창 자동 확대 방지(16px) */
 @media (pointer:coarse){
   .btn{min-height:44px}
-  .btn.sm{min-height:40px}
+  .btn.sm{min-height:44px}
   .top-row button,.top-row .jmb-tichu-btn,#btnRefresh,#btnAdmin{min-width:44px;min-height:44px}
   .trend-item{min-height:44px;display:flex;align-items:center}
   .trend-src,.trend-more{min-height:40px;display:inline-flex;align-items:center;padding:0 8px}
   #jmbTichuBtn,.jmb-tichu-btn{min-height:44px;height:auto}
   .today-news-item{min-height:44px;display:flex;align-items:center}
   #btnMoreNews{min-height:40px;display:inline-flex;align-items:center;padding:0 8px}
-  input,select,textarea{font-size:16px}
+  input,select,textarea,.input,select.input,textarea.input{font-size:16px}
 }
 /* 홈 카드: 실시간 검색어 · 소식만 남은 파란 카드 (눌러도 동작 없음) / 로그인 안내 카드 */
 .card.today{cursor:default}

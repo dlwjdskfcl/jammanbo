@@ -4,7 +4,8 @@
  */
 (function () {
   'use strict';
-  var VER = '1.0.0';
+  var VER = '1.0.1';
+  if (window.JMB_GVER) JMB_GVER(VER);
   var CFG = window.JMB_CONFIG || {};
   var ENV = CFG.env || 'prod';
   var ENV_SFX = ENV !== 'prod' ? '_' + ENV : '';

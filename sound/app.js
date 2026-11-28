@@ -7,7 +7,8 @@
   var S = window.JMB_SND;
   if (!S) return;
   var $ = function (id) { return document.getElementById(id); };
-  var VER = '1.0.1';
+  var VER = '1.0.2';
+  if (window.JMB_GVER) JMB_GVER(VER);
   var FX = window.JMB_FX || null;
   var KEYS = '1234567890QWERTYUIOPASDFGHJKLZXCVBNM';
 

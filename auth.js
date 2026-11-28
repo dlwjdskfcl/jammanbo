@@ -377,5 +377,19 @@
     manageLinks: viewManage
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  /* 맨 아래 버전 표시 — 화면 코드(#view)는 탭마다 다시 그려져서 지워지니 body 끝에 따로 둠. 앱 버전은 데이터(D.app)가 온 뒤에 채움 */
+  function setupGver() {
+    try {
+      var f = document.getElementById('jmbGver');
+      if (!f) { f = document.createElement('footer'); f.id = 'jmbGver'; document.body.appendChild(f); }
+      var n = 0;
+      (function fill() {
+        var cfg = window.JMB_CONFIG || {}, app = window.D && window.D.app;
+        f.textContent = '잠만보 · 앱 ' + (app && app.ver ? 'v' + app.ver : '…') + ' · 시작 페이지 v' + (cfg.version || '?');
+        if (!(app && app.ver) && ++n < 40) setTimeout(fill, 500);
+      })();
+    } catch (e) {}
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { init(); setupGver(); }); else { init(); setupGver(); }
 })();

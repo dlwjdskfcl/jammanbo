@@ -15,4 +15,16 @@
   set();
   window.addEventListener('resize', set);
   window.addEventListener('orientationchange', set);
+  /* 맨 아래 '화면 vX.Y.Z' — 각 페이지가 자기 VER 한 곳의 값을 넘김. 이미 #gver 가 있으면(마피아 · 티츄) 글자만 채움.
+     body 끝에 붙여서 화면 안쪽이 다시 그려져도 안 지워짐 */
+  window.JMB_GVER = function (ver, host) {   // host = 붙일 자리(선택자) — 화면 높이에 딱 맞는 페이지(지도 · 마이티)용, 없으면 body 끝
+    function put() {
+      try {
+        var f = document.getElementById('gver');
+        if (!f) { f = document.createElement('footer'); f.id = 'gver'; f.className = 'gver'; (host && document.querySelector(host) || document.body).appendChild(f); }
+        f.textContent = '잠만보 · 화면 v' + ver;
+      } catch (e) {}
+    }
+    if (document.body) put(); else document.addEventListener('DOMContentLoaded', put);
+  };
 })();
