@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  var APP_VER = '1.28.2';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
+  var APP_VER = '1.28.3';   // 화면 버전 — 계정 창(이름 버튼)에 표시. 서버 버전은 응답의 sv
   var MIN_SV = '1.17.8';    // 이 화면이 쓰는 서버 기능의 최소 버전(g.ptsLive = 서버 1.17.8+). 이보다 낮은 서버일 때만 '새로 배포 필요' 경고 — 화면(1.x)과 서버(1.x)는 번호 체계가 달라 서로 같게 맞추지 않음
   var CFG = window.TICHU_CONFIG || {};
   var ENV_SFX = CFG.env && CFG.env !== 'prod' ? '_' + CFG.env : '';
@@ -499,7 +499,6 @@
       '<button class="btn primary block" type="submit" id="lbtn">로그인</button></form></details>' +
       '</div>' +
       '<a class="small" href="' + ROOT + '">← 잠만보로 돌아가기</a>' +
-      gverHTML(1) +
       '</div>';
     var kg = $('#kGo'); if (kg) kg.onclick = function () { loginKakao(kg); };
     var ks2 = $('#kStart'); if (ks2) ks2.onclick = startKakao;
@@ -572,7 +571,7 @@
     else if (r === 'rank') body = rankBody();
     else if (r === 'me') body = recBody();
     else body = rulesBody();
-    app.innerHTML = '<div class="shell">' + header() + '<div class="content">' + body + gverHTML(1) + '</div>' + tabbar(r) + '</div>';
+    app.innerHTML = '<div class="shell">' + header() + '<div class="content">' + body + '</div>' + tabbar(r) + '</div>';
     bindShell();
     // (1.29.1) 아르케온 '곧 출시예정' 홍보(../promo.js) — 방 목록에서만. 다른 탭 · 방 · 게임 화면에서는 안 뜸
     if (window.JMB_PROMO) { if (r === 'lobby') JMB_PROMO.show('lobby', document.querySelector('.content')); else JMB_PROMO.hide(); }
@@ -1404,7 +1403,7 @@
       '<div style="display:flex;gap:8px"><button class="btn block" id="wInvite">🔗 초대 링크 복사</button>' + (me >= 0 ? '<button class="btn danger block" id="wLeave">나가기</button>' : '') + '</div>' +
       '<div class="sec-title">채팅</div>' + adHTML('ad-chat') + '<div class="chatlist" id="wChatList">' + chatItems(r.chat.slice(-8)) + '</div>' +
       '<form class="chatform" id="wChatForm"><input class="input" id="wMsg" maxlength="100" placeholder="메시지" autocomplete="off"><button class="btn" type="submit">보내기</button></form>' +
-      gverHTML(1) + '</div></div>';
+      '</div></div>';
     var focused = document.activeElement && document.activeElement.id === 'wMsg', val = focused ? $('#wMsg').value : '';
     app.innerHTML = h;
     if (focused) { var mi = $('#wMsg'); mi.value = val; mi.focus(); }
@@ -1677,7 +1676,7 @@
       if (mst && mst.afk) h += '<div class="afkbar">자리 비움 · 자동 진행 중 <button class="btn sm primary" id="gBack">돌아왔어요</button></div>';
       h += '<div class="timerbar"><i id="myTimer" style="width:0"></i></div>';
       h += myBarHTML(g, me, pend, myTurn, top);
-      h += '<div class="handwrap"><div id="recvBar"></div><div class="hand" id="hand"></div>' + gverHTML() + '</div>';
+      h += '<div class="handwrap"><div id="recvBar"></div><div class="hand" id="hand"></div></div>';
     } else {
       // 관전: 누구 시점으로 볼지 고르는 큰 버튼 4개 (테이블 자리를 눌러도 됨) + 패 보기 방이면 그 사람 패 + 봇 자리 이어받기
       var takes = r.status === 'play' && !r.solo && !r.opt.peek ? r.seats.map(function (st, s) {
@@ -1688,7 +1687,7 @@
         (peek ? '<div class="handwrap peek"><div class="hand" id="peekHand"></div></div>' : '') +
         '<div class="sline">👀 관전 중 · ' + esc(r.name) + (r.status === 'play' ? '' : ' (게임 끝)') +
           (peek ? ' <button class="btn sm" id="gPeekAll">🃏 4명 한눈에</button>' : r.opt.peek ? '' : ' <span class="small">· 자리를 누르면 그 사람 시점</span>') + '</div>' +
-        watchersHTML(r) + (takes ? '<div class="takes">' + takes + '</div>' : '') + gverHTML() + '</div>';
+        watchersHTML(r) + (takes ? '<div class="takes">' + takes + '</div>' : '') + '</div>';
     }
     h += '</div>';
     app.innerHTML = h;
@@ -1775,11 +1774,6 @@
     g.trick.plays.forEach(function (p) { var v = TE.sumPoints(p.c.c); by[p.s] += v; tot += v; });
     if (op && op.k === 'play' && op.c && me >= 0) { var v2 = TE.sumPoints(op.c.c); by[me] += v2; tot += v2; }
     return { by: by, tot: tot };
-  }
-  // 맨 아래 패치 버전 — 게임 화면은 작은 한 줄(자리가 빡빡함), 로그인 · 로비 · 랭킹 · 대기실(pg)은 서버 버전까지
-  function gverHTML(pg) {
-    if (!pg) return '<div class="gver">화면 v' + APP_VER + '</div>';
-    return '<div class="gver pg">티츄 · 화면 v' + APP_VER + (S.sv && S.sv !== 'old' ? ' · 서버 v' + esc(S.sv) : '') + (svWarn() ? ' <span class="warn">서버 새로 배포 필요</span>' : '') + '</div>';
   }
   function plusN(n) { return n >= 0 ? '+' + n : String(n); }
   function ptsFmt(n) { return (n > 0 ? '+' : '') + n + '점'; }
